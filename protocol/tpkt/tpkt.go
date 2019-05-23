@@ -1,6 +1,7 @@
 package tpkt
 
 import (
+	"github.com/chuckpreslar/emission"
 	"net"
 )
 
@@ -21,12 +22,13 @@ const (
  * TPKT layer of rdp stack
  */
 type TPKT struct {
+	emission.Emitter
 	conn    net.Conn
 	secFlag byte
 }
 
 func New(conn net.Conn) *TPKT {
-	t := &TPKT{conn, nil}
+	t := &TPKT{*emission.NewEmitter(), conn, nil}
 	return t
 }
 
@@ -34,17 +36,30 @@ func (t *TPKT) Read(b []byte) (n int, err error) {
 	return t.conn.Read(b)
 }
 
-/**
- * Send message throught TPKT layer
- * @param message {type.*}
- */
 func (t *TPKT) Write(b []byte) (n int, err error) {
 	return 0, nil
 }
 
-/**
- * close stack
- */
 func (t *TPKT) Close() error {
 	return t.conn.Close()
+}
+
+func (t *TPKT) recvHeader() {
+
+}
+
+func (t *TPKT) recvExtendedHeader() {
+
+}
+
+func (t *TPKT) recvData() {
+
+}
+
+func (t *TPKT) recvExtendedFastPathHeader() {
+
+}
+
+func (t *TPKT) recvFastPath() {
+
 }

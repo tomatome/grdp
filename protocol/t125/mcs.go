@@ -1,20 +1,25 @@
 package t125
 
-import "github.com/icodeface/grdp/protocol"
+import (
+	"github.com/chuckpreslar/emission"
+	"github.com/icodeface/grdp/protocol"
+)
 
 // take idea from https://github.com/Madnikulin50/gordp
 
-type McsMessage uint8
+// Multiple Channel Service layer
+
+type MCSMessage uint8
 
 const (
-	MCS_TYPE_CONNECT_INITIAL  McsMessage = 0x65
+	MCS_TYPE_CONNECT_INITIAL  MCSMessage = 0x65
 	MCS_TYPE_CONNECT_RESPONSE            = 0x66
 )
 
-type McsDomainPDU uint16
+type MCSDomainPDU uint16
 
 const (
-	ERECT_DOMAIN_REQUEST          McsDomainPDU = 1
+	ERECT_DOMAIN_REQUEST          MCSDomainPDU = 1
 	DISCONNECT_PROVIDER_ULTIMATUM              = 8
 	ATTACH_USER_REQUEST                        = 10
 	ATTACH_USER_CONFIRM                        = 11
@@ -24,10 +29,10 @@ const (
 	SEND_DATA_INDICATION                       = 26
 )
 
-type McsChannel uint16
+type MCSChannel uint16
 
 const (
-	MCS_GLOBAL_CHANNEL   McsChannel = 1003
+	MCS_GLOBAL_CHANNEL   MCSChannel = 1003
 	MCS_USERCHANNEL_BASE            = 1001
 )
 
@@ -105,12 +110,33 @@ func NewConnectResponse(userData []byte) *ConnectResponse {
 		userData}
 }
 
-type Mcs struct {
-	transport protocol.Transport
+type MCSChannelInfo struct {
+	id   MCSChannel
+	name string
 }
 
-func NewMcs(t protocol.Transport) *Mcs {
-	return &Mcs{
-		transport: t,
+type MCS struct {
+	emission.Emitter
+	transport  protocol.Transport
+	recvOpCode MCSDomainPDU
+	sendOpCode MCSDomainPDU
+	channels   []MCSChannelInfo
+}
+
+func NewMCS(t protocol.Transport, recvOpCode MCSDomainPDU, sendOpCode MCSDomainPDU) *MCS {
+	m := &MCS{
+		*emission.NewEmitter(),
+		t,
+		recvOpCode,
+		sendOpCode,
+		[]MCSChannelInfo{{MCS_GLOBAL_CHANNEL, "global"}},
 	}
+
+	m.transport.On("close", func() {
+		m.Emit("close")
+	}).On("error", func() {
+		m.Emit("error")
+	})
+
+	return m
 }

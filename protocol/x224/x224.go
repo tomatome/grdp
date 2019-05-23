@@ -3,6 +3,7 @@ package x224
 import (
 	"bytes"
 	"errors"
+	"github.com/chuckpreslar/emission"
 	"github.com/icodeface/grdp/protocol"
 )
 
@@ -159,18 +160,27 @@ func NewDataHeader() *DataHeader {
  * @param presentation {Layer} presentation layer
  */
 type X224 struct {
-	//emission.Emitter
+	emission.Emitter
 	transport         protocol.Transport
 	requestedProtocol Protocol
 	selectedProtocol  Protocol
 }
 
 func New(t protocol.Transport) *X224 {
-	return &X224{
-		transport:         t,
-		requestedProtocol: PROTOCOL_SSL,
-		selectedProtocol:  PROTOCOL_SSL,
+	x := &X224{
+		*emission.NewEmitter(),
+		t,
+		PROTOCOL_SSL,
+		PROTOCOL_SSL,
 	}
+
+	t.On("close", func() {
+		x.Emit("close")
+	}).On("error", func() {
+		x.Emit("error")
+	})
+
+	return x
 }
 
 func (x *X224) Read(b []byte) (n int, err error) {
@@ -195,5 +205,13 @@ func (x *X224) Connect() error {
 
 	_, err := x.transport.Write(message.Serialize())
 
+	x.transport.Once("data", func() {
+		x.recvConnectionConfirm()
+	})
+
 	return err
+}
+
+func (x *X224) recvConnectionConfirm() {
+
 }

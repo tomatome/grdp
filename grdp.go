@@ -11,7 +11,7 @@ type GrdpClient struct {
 	Host string // ip:port
 	tpkt *tpkt.TPKT
 	x224 *x224.X224
-	mcs  *t125.Mcs
+	mcs  *t125.MCS
 }
 
 func NewClient(host string) *GrdpClient {
@@ -27,7 +27,7 @@ func (g *GrdpClient) Login(user, pwd string) error {
 	}
 	g.tpkt = tpkt.New(conn)
 	g.x224 = x224.New(g.tpkt)
-	g.mcs = t125.NewMcs(g.x224)
+	g.mcs = t125.NewMCS(g.x224, t125.SEND_DATA_INDICATION, t125.SEND_DATA_REQUEST)
 
 	g.x224.Connect()
 
