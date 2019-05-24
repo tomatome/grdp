@@ -1,23 +1,89 @@
 package binary
 
-import "io"
+import (
+	"encoding/binary"
+	"io"
+)
 
-type Writable interface {
-	Write(w io.Writer) error
+type ReadBytesComplete func(result []byte, err error)
+
+func StartReadBytes(len int, r io.Reader, cb ReadBytesComplete) {
+	b := make([]byte, len)
+	go func() {
+		_, err := io.ReadFull(r, b)
+		cb(b, err)
+	}()
 }
 
-type LengthCalculator struct {
-	len int
+func ReadBytes(len int, r io.Reader) ([]byte, error) {
+	b := make([]byte, len)
+	length, err := io.ReadFull(r, b)
+	return b[:length], err
 }
 
-func (calc *LengthCalculator) Write(p []byte) (n int, err error) {
-	l := len(p)
-	calc.len += l
-	return l, nil
+func ReadByte(r io.Reader) (byte, error) {
+	b, err := ReadBytes(1, r)
+	return b[0], err
 }
 
-func CalcDataLength(obj Writable) int {
-	calc := &LengthCalculator{0}
-	obj.Write(calc)
-	return calc.len
+func ReadUInt8(r io.Reader) (uint8, error) {
+	b, err := ReadBytes(1, r)
+	return uint8(b[0]), err
+}
+
+func ReadUint16LE(r io.Reader) (uint16, error) {
+	b := make([]byte, 2)
+	_, err := io.ReadFull(r, b)
+	if err != nil {
+		return 0, nil
+	}
+	return binary.LittleEndian.Uint16(b), nil
+}
+
+func ReadUint16BE(r io.Reader) (uint16, error) {
+	b := make([]byte, 2)
+	_, err := io.ReadFull(r, b)
+	if err != nil {
+		return 0, nil
+	}
+	return binary.BigEndian.Uint16(b), nil
+}
+
+func ReadUInt32LE(r io.Reader) (uint32, error) {
+	b := make([]byte, 4)
+	_, err := io.ReadFull(r, b)
+	if err != nil {
+		return 0, nil
+	}
+	return binary.LittleEndian.Uint32(b), nil
+}
+
+func WriteByte(data byte, w io.Writer) (int, error) {
+	b := make([]byte, 1)
+	b[0] = byte(data)
+	return w.Write(b)
+}
+
+func WriteUInt8(data uint8, w io.Writer) (int, error) {
+	b := make([]byte, 1)
+	b[0] = byte(data)
+	return w.Write(b)
+}
+
+func WriteUInt16BE(data uint16, w io.Writer) (int, error) {
+	b := make([]byte, 2)
+	binary.BigEndian.PutUint16(b, data)
+	return w.Write(b)
+}
+
+func WriteUInt16LE(data uint16, w io.Writer) (int, error) {
+	b := make([]byte, 2)
+	binary.LittleEndian.PutUint16(b, data)
+	return w.Write(b)
+}
+
+func WriteUInt32LE(data uint32, w io.Writer) (int, error) {
+	b := make([]byte, 4)
+	binary.LittleEndian.PutUint32(b, data)
+	return w.Write(b)
 }

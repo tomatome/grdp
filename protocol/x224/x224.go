@@ -3,8 +3,11 @@ package x224
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/chuckpreslar/emission"
+	"github.com/icodeface/grdp/binary"
 	"github.com/icodeface/grdp/protocol"
+	"io"
 )
 
 // take idea from https://github.com/Madnikulin50/gordp
@@ -65,25 +68,35 @@ func NewNegotiation() *Negotiation {
 	return &Negotiation{0, 0, 0x0008 /*constant*/, uint32(PROTOCOL_RDP)}
 }
 
-//func (x *Negotiation) Write(w core.Writer) {
-//	core.WriteByte(byte(x.Type), w)
-//	core.WriteUInt8(x.Flag, w)
-//	core.WriteUInt16LE(x.Length, w)
-//	core.WriteUInt32LE(x.Result, w)
-//}
-//
-//func (x *Negotiation) Read(r core.Reader) error {
-//	var err error
-//	b, err := core.ReadByte(r)
-//	x.Type = NegotiationType(b)
-//	x.Flag, err = core.ReadUInt8(r)
-//	x.Length, err = core.ReadUInt16LE(r)
-//	x.Result, err = core.ReadUInt32LE(r)
-//	if x.Length == 0x0008 {
-//		return errors.New("invalid x224 negoitiate")
-//	}
-//	return err
-//}
+func (x *Negotiation) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	binary.WriteByte(byte(x.Type), buff) // 1
+	binary.WriteUInt8(x.Flag, buff)      // 0
+	binary.WriteUInt16LE(x.Length, buff) // 8 0
+	binary.WriteUInt32LE(x.Result, buff) // 1 0 0 0 vs 3 0 0 0
+	return buff.Bytes()
+}
+
+func ReadNegotiation(r io.Reader) (*Negotiation, error) {
+	// 3 0 8 0 5 0 0 0
+	n := &Negotiation{}
+
+	b, err := binary.ReadByte(r) // 3 TYPE_RDP_NEG_FAILURE
+	if err != nil {
+		return nil, err
+	}
+	n.Type = NegotiationType(b)
+
+	n.Flag, err = binary.ReadUInt8(r)      // 0
+	n.Length, err = binary.ReadUint16LE(r) // 8
+	n.Result, err = binary.ReadUInt32LE(r) // 0 5
+
+	if n.Length == 0x0008 {
+		return nil, errors.New("invalid x224 negoitiate")
+	}
+
+	return n, nil
+}
 
 /**
  * X224 client connection request
@@ -104,28 +117,35 @@ type ClientConnectionRequestPDU struct {
 func NewClientConnectionRequestPDU(coockie []byte) *ClientConnectionRequestPDU {
 	x := ClientConnectionRequestPDU{0, TPDU_CONNECTION_REQUEST, 0, 0, 0,
 		coockie, *NewNegotiation() /*, [36]byte{}*/}
-	// todo x.Len = uint8(binary.CalcDataLength(&x))
+	x.Len = uint8(len(x.Serialize()) - 1)
 	return &x
 }
 
 func (x *ClientConnectionRequestPDU) Serialize() []byte {
-	// todo
-	var b bytes.Buffer
-
-	return b.Bytes()
+	buff := &bytes.Buffer{}
+	binary.WriteUInt8(x.Len, buff)
+	binary.WriteUInt8(uint8(x.Code), buff)
+	binary.WriteUInt16LE(x.Padding1, buff)
+	binary.WriteUInt16LE(x.Padding2, buff)
+	binary.WriteUInt8(x.Padding3, buff)
+	buff.Write(x.Cookie)
+	//if x.Len > 14:
+	binary.WriteUInt16LE(0x0A0D, buff)
+	buff.Write(x.ProtocolNeg.Serialize())
+	fmt.Println("ProtocolNeg", x.ProtocolNeg.Serialize())
+	return buff.Bytes()
 }
 
-//func (x *ClientConnectionRequestPDU) Write(w core.Writer) error {
-//	core.WriteUInt8(x.Len, w)
-//	core.WriteUInt8(uint8(x.Code), w)
-//	core.WriteUInt16LE(x.Padding1, w)
-//	core.WriteUInt16LE(x.Padding2, w)
-//	core.WriteUInt8(x.Padding3, w)
-//	w.Write(x.Cookie)
-//	core.WriteUInt16LE(0x0a0d, w)
-//	x.ProtocolNeg.Write(w)
-//	return nil
-//}
+// 14 224 0 0 0 0 0
+// 1 0
+// 8 0 3 0 0 0
+
+// 16 224 0 0 0 0 0
+//
+// 10 13
+//
+// 1 0
+// 8 0 1 0 0 0
 
 /**
  * X224 Server connection confirm
@@ -139,6 +159,28 @@ type ServerConnectionConfirm struct {
 	Padding2    uint16
 	Padding3    uint8
 	ProtocolNeg Negotiation
+}
+
+func ReadServerConnectionConfirm(r io.Reader) (*ServerConnectionConfirm, error) {
+	// 14 208 0 0 18 52 0 3 0 8 0 5 0 0 0
+	s := &ServerConnectionConfirm{}
+	var err error
+	s.Len, err = binary.ReadUInt8(r) // 14
+
+	code, err := binary.ReadUInt8(r) // 208 TPDU_CONNECTION_CONFIRM
+	s.Code = MessageType(code)
+
+	s.Padding1, err = binary.ReadUint16LE(r) // 0 0
+	s.Padding2, err = binary.ReadUint16LE(r) // 18 52
+	s.Padding3, err = binary.ReadUInt8(r)    // 0
+
+	neo, err := ReadNegotiation(r)
+	if err != nil {
+		return nil, err
+	}
+	s.ProtocolNeg = *neo
+
+	return s, err
 }
 
 /**
@@ -176,8 +218,8 @@ func New(t protocol.Transport) *X224 {
 
 	t.On("close", func() {
 		x.Emit("close")
-	}).On("error", func() {
-		x.Emit("error")
+	}).On("error", func(err error) {
+		x.Emit("error", err)
 	})
 
 	return x
@@ -196,6 +238,7 @@ func (x *X224) Close() error {
 }
 
 func (x *X224) Connect() error {
+	fmt.Println("x224 Connect")
 	if x.transport == nil {
 		return errors.New("no transport")
 	}
@@ -204,14 +247,49 @@ func (x *X224) Connect() error {
 	message.ProtocolNeg.Result = uint32(x.requestedProtocol)
 
 	_, err := x.transport.Write(message.Serialize())
-
-	x.transport.Once("data", func() {
-		x.recvConnectionConfirm()
-	})
-
+	x.transport.Once("data", x.recvConnectionConfirm)
 	return err
 }
 
-func (x *X224) recvConnectionConfirm() {
+func (x *X224) recvConnectionConfirm(s []byte) {
+	fmt.Println("x224 recvConnectionConfirm", s)
 
+	message, err := ReadServerConnectionConfirm(bytes.NewReader(s))
+	if err != nil {
+		fmt.Println("ReadServerConnectionConfirm err", err)
+		return
+	}
+
+	if message.ProtocolNeg.Type == TYPE_RDP_NEG_FAILURE {
+		fmt.Println("NODE_RDP_PROTOCOL_NEG_FAILURE")
+		return
+	}
+
+	if message.ProtocolNeg.Type == TYPE_RDP_NEG_RSP {
+		x.selectedProtocol = Protocol(message.ProtocolNeg.Result)
+	}
+
+	if x.selectedProtocol == PROTOCOL_HYBRID || x.selectedProtocol == PROTOCOL_HYBRID_EX {
+		fmt.Println("NODE_RDP_PROTOCOL_NLA_NOT_SUPPORTED")
+		return
+	}
+
+	if x.selectedProtocol == PROTOCOL_RDP {
+		fmt.Println("RDP standard security selected")
+		return
+	}
+
+	x.transport.On("data", x.recvData)
+
+	if x.selectedProtocol == PROTOCOL_SSL {
+		fmt.Println("SSL standard security selected")
+		// todo start tls
+	}
+}
+
+func (x *X224) recvData(s []byte) {
+	fmt.Println("x224 recvData", s)
+	// check header
+	//x224DataHeader().read(s);
+	//this.emit('data', s);
 }

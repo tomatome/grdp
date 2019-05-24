@@ -134,8 +134,8 @@ func NewMCS(t protocol.Transport, recvOpCode MCSDomainPDU, sendOpCode MCSDomainP
 
 	m.transport.On("close", func() {
 		m.Emit("close")
-	}).On("error", func() {
-		m.Emit("error")
+	}).On("error", func(err error) {
+		m.Emit("error", err)
 	})
 
 	return m
