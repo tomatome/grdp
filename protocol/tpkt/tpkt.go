@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/chuckpreslar/emission"
-	"github.com/icodeface/grdp/binary"
-	"net"
+	"github.com/icodeface/grdp/core"
 )
 
 // take idea from https://github.com/Madnikulin50/gordp
@@ -28,32 +27,32 @@ const (
  */
 type TPKT struct {
 	emission.Emitter
-	conn    net.Conn
+	Conn    *core.SocketLayer
 	secFlag byte
 }
 
-func New(conn net.Conn) *TPKT {
-	t := &TPKT{*emission.NewEmitter(), conn, 0}
-	binary.StartReadBytes(2, conn, t.recvHeader)
+func New(s *core.SocketLayer) *TPKT {
+	t := &TPKT{*emission.NewEmitter(), s, 0}
+	core.StartReadBytes(2, s, t.recvHeader)
 	return t
 }
 
 func (t *TPKT) Read(b []byte) (n int, err error) {
-	return t.conn.Read(b)
+	return t.Conn.Read(b)
 }
 
 func (t *TPKT) Write(data []byte) (n int, err error) {
 	buff := &bytes.Buffer{}
-	binary.WriteUInt8(FASTPATH_ACTION_X224, buff)
-	binary.WriteUInt8(0, buff)
-	binary.WriteUInt16BE(uint16(len(data)+4), buff)
+	core.WriteUInt8(FASTPATH_ACTION_X224, buff)
+	core.WriteUInt8(0, buff)
+	core.WriteUInt16BE(uint16(len(data)+4), buff)
 	buff.Write(data)
 	fmt.Println("tpkt Write", buff.Bytes())
-	return t.conn.Write(buff.Bytes())
+	return t.Conn.Write(buff.Bytes())
 }
 
 func (t *TPKT) Close() error {
-	return t.conn.Close()
+	return t.Conn.Close()
 }
 
 func (t *TPKT) recvHeader(s []byte, err error) {
@@ -64,16 +63,16 @@ func (t *TPKT) recvHeader(s []byte, err error) {
 	}
 	version := s[0]
 	if version == FASTPATH_ACTION_X224 {
-		binary.StartReadBytes(2, t.conn, t.recvExtendedHeader)
+		core.StartReadBytes(2, t.Conn, t.recvExtendedHeader)
 	} else {
 		t.secFlag = (version >> 6) & 0x3
 		length := int(s[1])
 		if length&0x80 != 0 {
-			binary.StartReadBytes(1, t.conn, func(s []byte, err error) {
+			core.StartReadBytes(1, t.Conn, func(s []byte, err error) {
 				t.recvExtendedFastPathHeader(s, length, err)
 			})
 		} else {
-			binary.StartReadBytes(length-2, t.conn, t.recvFastPath)
+			core.StartReadBytes(length-2, t.Conn, t.recvFastPath)
 		}
 	}
 }
@@ -84,8 +83,8 @@ func (t *TPKT) recvExtendedHeader(s []byte, err error) {
 		return
 	}
 	r := bytes.NewReader(s)
-	size, _ := binary.ReadUint16BE(r)
-	binary.StartReadBytes(int(size-4), t.conn, t.recvData)
+	size, _ := core.ReadUint16BE(r)
+	core.StartReadBytes(int(size-4), t.Conn, t.recvData)
 }
 
 func (t *TPKT) recvData(s []byte, err error) {
@@ -94,7 +93,7 @@ func (t *TPKT) recvData(s []byte, err error) {
 		return
 	}
 	t.Emit("data", s)
-	binary.StartReadBytes(2, t.conn, t.recvHeader)
+	core.StartReadBytes(2, t.Conn, t.recvHeader)
 }
 
 func (t *TPKT) recvExtendedFastPathHeader(s []byte, length int, err error) {

@@ -3,6 +3,7 @@ package grdp
 import (
 	"errors"
 	"fmt"
+	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/protocol/t125"
 	"github.com/icodeface/grdp/protocol/tpkt"
 	"github.com/icodeface/grdp/protocol/x224"
@@ -29,7 +30,7 @@ func (g *GrdpClient) Login(user, pwd string) error {
 		return errors.New(fmt.Sprintf("[dial err] %v", err))
 	}
 
-	g.tpkt = tpkt.New(conn)
+	g.tpkt = tpkt.New(core.NewSocketLayer(conn))
 	g.x224 = x224.New(g.tpkt)
 	g.mcs = t125.NewMCS(g.x224, t125.SEND_DATA_INDICATION, t125.SEND_DATA_REQUEST)
 

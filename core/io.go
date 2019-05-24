@@ -1,4 +1,4 @@
-package binary
+package core
 
 import (
 	"encoding/binary"

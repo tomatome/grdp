@@ -1,4 +1,4 @@
-package protocol
+package core
 
 import "github.com/chuckpreslar/emission"
 

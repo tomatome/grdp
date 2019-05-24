@@ -1,5 +1,12 @@
 # Go Retome Desktop Protocol
 
+SSL standard security
+需要
+```
+reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f
+```
+
+
 // https://blog.csdn.net/songbohr/article/details/5309650
 
 ## 调用层次：
@@ -21,6 +28,3 @@ rdp_disconnect，按照调用层次依次调用sec_disconnect……断开。
 然后再调用tcp_disconnect 断开连接。
 
 
-## 过程
-
-1.

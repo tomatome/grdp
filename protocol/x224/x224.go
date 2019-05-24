@@ -2,11 +2,12 @@ package x224
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/chuckpreslar/emission"
-	"github.com/icodeface/grdp/binary"
-	"github.com/icodeface/grdp/protocol"
+	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/protocol/tpkt"
 	"io"
 )
 
@@ -70,10 +71,10 @@ func NewNegotiation() *Negotiation {
 
 func (x *Negotiation) Serialize() []byte {
 	buff := &bytes.Buffer{}
-	binary.WriteByte(byte(x.Type), buff) // 1
-	binary.WriteUInt8(x.Flag, buff)      // 0
-	binary.WriteUInt16LE(x.Length, buff) // 8 0
-	binary.WriteUInt32LE(x.Result, buff) // 1 0 0 0 vs 3 0 0 0
+	core.WriteByte(byte(x.Type), buff) // 1
+	core.WriteUInt8(x.Flag, buff)      // 0
+	core.WriteUInt16LE(x.Length, buff) // 8 0
+	core.WriteUInt32LE(x.Result, buff) // 1 0 0 0 vs 3 0 0 0
 	return buff.Bytes()
 }
 
@@ -81,19 +82,15 @@ func ReadNegotiation(r io.Reader) (*Negotiation, error) {
 	// 3 0 8 0 5 0 0 0
 	n := &Negotiation{}
 
-	b, err := binary.ReadByte(r) // 3 TYPE_RDP_NEG_FAILURE
+	b, err := core.ReadByte(r) // 3 TYPE_RDP_NEG_FAILURE
 	if err != nil {
 		return nil, err
 	}
 	n.Type = NegotiationType(b)
 
-	n.Flag, err = binary.ReadUInt8(r)      // 0
-	n.Length, err = binary.ReadUint16LE(r) // 8
-	n.Result, err = binary.ReadUInt32LE(r) // 0 5
-
-	if n.Length == 0x0008 {
-		return nil, errors.New("invalid x224 negoitiate")
-	}
+	n.Flag, err = core.ReadUInt8(r)      // 0
+	n.Length, err = core.ReadUint16LE(r) // 8
+	n.Result, err = core.ReadUInt32LE(r) // 0 5
 
 	return n, nil
 }
@@ -123,14 +120,14 @@ func NewClientConnectionRequestPDU(coockie []byte) *ClientConnectionRequestPDU {
 
 func (x *ClientConnectionRequestPDU) Serialize() []byte {
 	buff := &bytes.Buffer{}
-	binary.WriteUInt8(x.Len, buff)
-	binary.WriteUInt8(uint8(x.Code), buff)
-	binary.WriteUInt16LE(x.Padding1, buff)
-	binary.WriteUInt16LE(x.Padding2, buff)
-	binary.WriteUInt8(x.Padding3, buff)
+	core.WriteUInt8(x.Len, buff)
+	core.WriteUInt8(uint8(x.Code), buff)
+	core.WriteUInt16LE(x.Padding1, buff)
+	core.WriteUInt16LE(x.Padding2, buff)
+	core.WriteUInt8(x.Padding3, buff)
 	buff.Write(x.Cookie)
 	//if x.Len > 14:
-	binary.WriteUInt16LE(0x0A0D, buff)
+	core.WriteUInt16LE(0x0A0D, buff)
 	buff.Write(x.ProtocolNeg.Serialize())
 	fmt.Println("ProtocolNeg", x.ProtocolNeg.Serialize())
 	return buff.Bytes()
@@ -165,14 +162,14 @@ func ReadServerConnectionConfirm(r io.Reader) (*ServerConnectionConfirm, error) 
 	// 14 208 0 0 18 52 0 3 0 8 0 5 0 0 0
 	s := &ServerConnectionConfirm{}
 	var err error
-	s.Len, err = binary.ReadUInt8(r) // 14
+	s.Len, err = core.ReadUInt8(r) // 14
 
-	code, err := binary.ReadUInt8(r) // 208 TPDU_CONNECTION_CONFIRM
+	code, err := core.ReadUInt8(r) // 208 TPDU_CONNECTION_CONFIRM
 	s.Code = MessageType(code)
 
-	s.Padding1, err = binary.ReadUint16LE(r) // 0 0
-	s.Padding2, err = binary.ReadUint16LE(r) // 18 52
-	s.Padding3, err = binary.ReadUInt8(r)    // 0
+	s.Padding1, err = core.ReadUint16LE(r) // 0 0
+	s.Padding2, err = core.ReadUint16LE(r) // 18 52
+	s.Padding3, err = core.ReadUInt8(r)    // 0
 
 	neo, err := ReadNegotiation(r)
 	if err != nil {
@@ -203,12 +200,12 @@ func NewDataHeader() *DataHeader {
  */
 type X224 struct {
 	emission.Emitter
-	transport         protocol.Transport
+	transport         core.Transport
 	requestedProtocol Protocol
 	selectedProtocol  Protocol
 }
 
-func New(t protocol.Transport) *X224 {
+func New(t core.Transport) *X224 {
 	x := &X224{
 		*emission.NewEmitter(),
 		t,
@@ -252,7 +249,11 @@ func (x *X224) Connect() error {
 }
 
 func (x *X224) recvConnectionConfirm(s []byte) {
-	fmt.Println("x224 recvConnectionConfirm", s)
+	fmt.Println("x224 recvConnectionConfirm", hex.EncodeToString(s))
+
+	// rdpy: 0ed000001234000209080002000000
+	// we:   0ed000001234000300080005000000
+	// we2:  0ed000001234000209080001000000
 
 	message, err := ReadServerConnectionConfirm(bytes.NewReader(s))
 	if err != nil {
@@ -266,6 +267,7 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 	}
 
 	if message.ProtocolNeg.Type == TYPE_RDP_NEG_RSP {
+		fmt.Println("TYPE_RDP_NEG_RSP")
 		x.selectedProtocol = Protocol(message.ProtocolNeg.Result)
 	}
 
@@ -283,7 +285,10 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 
 	if x.selectedProtocol == PROTOCOL_SSL {
 		fmt.Println("SSL standard security selected")
-		// todo start tls
+		err := x.transport.(*tpkt.TPKT).Conn.StartTLS()
+		if err != nil {
+			fmt.Println("start tls failed", err)
+		}
 	}
 }
 

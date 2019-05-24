@@ -2,7 +2,7 @@ package t125
 
 import (
 	"github.com/chuckpreslar/emission"
-	"github.com/icodeface/grdp/protocol"
+	"github.com/icodeface/grdp/core"
 )
 
 // take idea from https://github.com/Madnikulin50/gordp
@@ -117,13 +117,13 @@ type MCSChannelInfo struct {
 
 type MCS struct {
 	emission.Emitter
-	transport  protocol.Transport
+	transport  core.Transport
 	recvOpCode MCSDomainPDU
 	sendOpCode MCSDomainPDU
 	channels   []MCSChannelInfo
 }
 
-func NewMCS(t protocol.Transport, recvOpCode MCSDomainPDU, sendOpCode MCSDomainPDU) *MCS {
+func NewMCS(t core.Transport, recvOpCode MCSDomainPDU, sendOpCode MCSDomainPDU) *MCS {
 	m := &MCS{
 		*emission.NewEmitter(),
 		t,
