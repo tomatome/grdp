@@ -64,6 +64,10 @@ func WriteByte(data byte, w io.Writer) (int, error) {
 	return w.Write(b)
 }
 
+func WriteBytes(data []byte, w io.Writer) (int, error) {
+	return w.Write(data)
+}
+
 func WriteUInt8(data uint8, w io.Writer) (int, error) {
 	b := make([]byte, 1)
 	b[0] = byte(data)
@@ -85,5 +89,11 @@ func WriteUInt16LE(data uint16, w io.Writer) (int, error) {
 func WriteUInt32LE(data uint32, w io.Writer) (int, error) {
 	b := make([]byte, 4)
 	binary.LittleEndian.PutUint32(b, data)
+	return w.Write(b)
+}
+
+func WriteUInt32BE(data uint32, w io.Writer) (int, error) {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b, data)
 	return w.Write(b)
 }

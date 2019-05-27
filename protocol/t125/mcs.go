@@ -1,6 +1,7 @@
 package t125
 
 import (
+	"bytes"
 	"encoding/asn1"
 	"errors"
 	"fmt"
@@ -42,14 +43,14 @@ const (
 )
 
 type DomainParameters struct {
-	MaxChannelIds   int `asn1:"tag:2"`
-	MaxUserIds      int `asn1:"tag:2"`
-	MaxTokenIds     int `asn1:"tag:2"`
-	NumPriorities   int `asn1:"tag:2"`
-	MinThoughput    int `asn1:"tag:2"`
-	MaxHeight       int `asn1:"tag:2"`
-	MaxMCSPDUsize   int `asn1:"tag:2"`
-	ProtocolVersion int `asn1:"tag:2"`
+	MaxChannelIds   int `asn1: "tag:2"`
+	MaxUserIds      int `asn1: "tag:2"`
+	MaxTokenIds     int `asn1: "tag:2"`
+	NumPriorities   int `asn1: "tag:2"`
+	MinThoughput    int `asn1: "tag:2"`
+	MaxHeight       int `asn1: "tag:2"`
+	MaxMCSPDUsize   int `asn1: "tag:2"`
+	ProtocolVersion int `asn1: "tag:2"`
 }
 
 /**
@@ -74,25 +75,23 @@ func NewDomainParameters(maxChannelIds int,
  * @returns {asn1.univ.Sequence}
  */
 type ConnectInitial struct {
-	CallingDomainSelector []byte `asn1:"tag:4"`
-	CalledDomainSelector  []byte `asn1:"tag:4"`
+	CallingDomainSelector []byte `asn1: "tag:4"`
+	CalledDomainSelector  []byte `asn1: "tag:4"`
 	UpwardFlag            bool
 	TargetParameters      DomainParameters
 	MinimumParameters     DomainParameters
 	MaximumParameters     DomainParameters
-	UserData              []byte `asn1:"application, tag:101"`
+	UserData              []byte `asn1: "application, tag:101"`
 }
 
-func NewConnectInitial(userData []byte) *ConnectInitial {
-	return &ConnectInitial{[]byte{0x1},
+func NewConnectInitial(userData []byte) ConnectInitial {
+	return ConnectInitial{[]byte{0x1},
 		[]byte{0x1},
-		false,
+		true,
 		*NewDomainParameters(34, 2, 0, 1, 0, 1, 0xffff, 2),
 		*NewDomainParameters(1, 1, 1, 1, 0, 1, 0x420, 2),
 		*NewDomainParameters(0xffff, 0xfc17, 0xffff, 1, 0, 1, 0xffff, 2),
 		userData}
-	/*userData : new asn1.univ.OctetString(userData)
-	}).implicitTag(new asn1.spec.Asn1Tag(asn1.spec.TagClass.Application, asn1.spec.TagFormat.Constructed, 101));*/
 }
 
 /**
@@ -101,10 +100,10 @@ func NewConnectInitial(userData []byte) *ConnectInitial {
  */
 
 type ConnectResponse struct {
-	result           int `asn1:"tag:10"`
+	result           int `asn1: "tag:10"`
 	calledConnectId  int
 	domainParameters DomainParameters
-	userData         []byte `asn1:"tag:10"`
+	userData         []byte `asn1: "tag:10"`
 	//.implicitTag(new asn1.spec.Asn1Tag(asn1.spec.TagClass.Application, asn1.spec.TagFormat.Constructed, 102));
 }
 
@@ -176,8 +175,13 @@ func (c *MCSClient) connect(selectedProtocol x224.Protocol) {
 	c.clientCoreData.ServerSelectedProtocol = uint32(selectedProtocol)
 
 	// sendConnectInitial
-	conferenceCreateRequest := []byte{}
-	connectInitial := NewConnectInitial(conferenceCreateRequest)
+	userDataBuff := bytes.Buffer{}
+	userDataBuff.Write(c.clientCoreData.Block())
+	userDataBuff.Write(c.clientNetworkData.Block())
+	userDataBuff.Write(c.clientSecurityData.Block())
+
+	ccReq := gcc.MakeConferenceCreateRequest(userDataBuff.Bytes())
+	connectInitial := NewConnectInitial(ccReq)
 	connectInitialBerEncoded, err := asn1.Marshal(connectInitial)
 	if err != nil {
 		c.Emit("error", errors.New(fmt.Sprintf("mcs sendConnectInitial ber encode error %v", err)))

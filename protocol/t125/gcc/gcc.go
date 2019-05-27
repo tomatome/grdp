@@ -1,5 +1,16 @@
 package gcc
 
+import (
+	"bytes"
+	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/protocol/t125/per"
+)
+
+var t124_02_98_oid = []byte{0, 0, 20, 124, 0, 1}
+var h221_cs_key = "Duca"
+
+var h221_sc_key = "McDn"
+
 /**
  * @see http://msdn.microsoft.com/en-us/library/cc240509.aspx
  */
@@ -201,16 +212,6 @@ const (
 	CERT_CHAIN_VERSION_2                 = 0x00000002
 )
 
-/**
- * @param {type.Type} data
- * @returns {type.Component}
- */
-type Block struct {
-	Type   uint16
-	Length uint16
-	// Data core.Data
-}
-
 type ChannelDef struct {
 	Name    [8]byte
 	Options uint32
@@ -244,22 +245,61 @@ type ClientCoreData struct {
 func NewClientCoreData() *ClientCoreData {
 	return &ClientCoreData{
 		RDP_VERSION_5_PLUS, 1280, 800, RNS_UD_COLOR_8BPP,
-		RNS_UD_SAS_DEL, US, 3790, [32]byte{'g', 'o', 'r', 'd', 'p'}, KT_IBM_101_102_KEYS,
+		RNS_UD_SAS_DEL, US, 3790, [32]byte{'m', 's', 't', 's', 'c'}, KT_IBM_101_102_KEYS,
 		0, 12, [64]byte{}, RNS_UD_COLOR_8BPP, 1, 0, HIGH_COLOR_24BPP,
 		RNS_UD_15BPP_SUPPORT | RNS_UD_16BPP_SUPPORT | RNS_UD_24BPP_SUPPORT | RNS_UD_32BPP_SUPPORT,
 		RNS_UD_CS_SUPPORT_ERRINFO_PDU, [64]byte{}, 0, 0, 0}
 }
 
-func (data *ClientCoreData) Serialize() []byte {
-	return []byte{}
+func (c *ClientCoreData) GetType() Message {
+	return CS_CORE
+}
+
+func (data *ClientCoreData) Block() []byte {
+	buff := &bytes.Buffer{}
+	core.WriteUInt16LE(CS_CORE, buff) // type
+	core.WriteUInt16LE(0xd8, buff)    // len
+
+	core.WriteUInt32LE(uint32(data.RdpVersion), buff)
+	core.WriteUInt16LE(data.DesktopWidth, buff)
+	core.WriteUInt16LE(data.DesktopHeight, buff)
+	core.WriteUInt16LE(uint16(data.ColorDepth), buff)
+	core.WriteUInt16LE(uint16(data.SasSequence), buff)
+	core.WriteUInt32LE(uint32(data.KbdLayout), buff)
+	core.WriteUInt32LE(data.ClientBuild, buff)
+	core.WriteBytes(data.ClientName[:], buff)
+	core.WriteUInt32LE(data.KeyboardType, buff)
+	core.WriteUInt32LE(data.KeyboardFnKeys, buff)
+	core.WriteBytes(data.ImeFileName[:], buff)
+	core.WriteUInt16LE(uint16(data.PostBeta2ColorDepth), buff)
+	core.WriteUInt16LE(data.ClientProductId, buff)
+	core.WriteUInt32LE(data.SerialNumber, buff)
+	core.WriteUInt16LE(uint16(data.HighColorDepth), buff)
+	core.WriteUInt16LE(data.SupportedColorDepths, buff)
+	core.WriteUInt16LE(data.EarlyCapabilityFlags, buff)
+	core.WriteBytes(data.ClientDigProductId[:], buff)
+	core.WriteUInt8(data.ConnectionType, buff)
+	core.WriteUInt8(data.Pad1octet, buff)
+	core.WriteUInt32LE(data.ServerSelectedProtocol, buff)
+	return buff.Bytes()
 }
 
 type ClientNetworkData struct {
+	ChannelCount    uint32
 	ChannelDefArray []ChannelDef
 }
 
 func NewClientNetworkData() *ClientNetworkData {
 	return &ClientNetworkData{}
+}
+
+func (d *ClientNetworkData) Block() []byte {
+	// 03c0080000000000
+	buff := &bytes.Buffer{}
+	core.WriteUInt16LE(CS_NET, buff) // type
+	core.WriteUInt16LE(0x08, buff)   // len 8
+	buff.Write([]byte{0, 0, 0, 0})   // data
+	return buff.Bytes()
 }
 
 func (c *ClientNetworkData) GetType() Message {
@@ -277,8 +317,14 @@ func NewClientSecurityData() *ClientSecurityData {
 		00}
 }
 
-func (c *ClientSecurityData) GetType() Message {
-	return CS_SECURITY
+func (d *ClientSecurityData) Block() []byte {
+	// 02c0 0c000b00000000000000
+	buff := &bytes.Buffer{}
+	core.WriteUInt16LE(CS_SECURITY, buff) // type
+	core.WriteUInt16LE(0x0c, buff)        // len 12
+	core.WriteUInt32LE(d.EncryptionMethods, buff)
+	core.WriteUInt32LE(d.ExtEncryptionMethods, buff)
+	return buff.Bytes()
 }
 
 type ServerCoreData struct {
@@ -326,5 +372,18 @@ func (c *ServerSecurityData) GetType() Message {
 	return SC_SECURITY
 }
 
-type ConferenceCreateRequest struct {
+func MakeConferenceCreateRequest(userData []byte) []byte {
+	buff := &bytes.Buffer{}
+	per.WriteChoice(0, buff)                        // 00
+	per.WriteObjectIdentifier(t124_02_98_oid, buff) // 05:00:14:7c:00:01
+	per.WriteLength(uint16(len(userData)+14), buff)
+	per.WriteChoice(0, buff)                   // 00
+	per.WriteSelection(0x08, buff)             // 08
+	per.WriteNumericString("1", 1, buff)       // 00 10
+	per.WritePadding(1, buff)                  // 00
+	per.WriteNumberOfSet(1, buff)              // 01
+	per.WriteChoice(0xc0, buff)                // c0
+	per.WriteOctetStream(h221_cs_key, 4, buff) // 00 44:75:63:61
+	per.WriteOctetStream(string(userData), 0, buff)
+	return buff.Bytes()
 }
