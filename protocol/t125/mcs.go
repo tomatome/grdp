@@ -1,8 +1,13 @@
 package t125
 
 import (
+	"encoding/asn1"
+	"errors"
+	"fmt"
 	"github.com/chuckpreslar/emission"
 	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/protocol/t125/gcc"
+	"github.com/icodeface/grdp/protocol/x224"
 )
 
 // take idea from https://github.com/Madnikulin50/gordp
@@ -137,6 +142,56 @@ func NewMCS(t core.Transport, recvOpCode MCSDomainPDU, sendOpCode MCSDomainPDU) 
 	}).On("error", func(err error) {
 		m.Emit("error", err)
 	})
-
 	return m
+}
+
+func (m *MCS) Close() error {
+	return m.transport.Close()
+}
+
+type MCSClient struct {
+	*MCS
+	clientCoreData     *gcc.ClientCoreData
+	clientNetworkData  *gcc.ClientNetworkData
+	clientSecurityData *gcc.ClientSecurityData
+
+	serverCoreData     *gcc.ServerCoreData
+	serverNetworkData  *gcc.ServerNetworkData
+	serverSecurityData *gcc.ServerSecurityData
+}
+
+func NewMCSClient(t core.Transport) *MCSClient {
+	c := &MCSClient{
+		MCS:                NewMCS(t, SEND_DATA_INDICATION, SEND_DATA_REQUEST),
+		clientCoreData:     gcc.NewClientCoreData(),
+		clientNetworkData:  gcc.NewClientNetworkData(),
+		clientSecurityData: gcc.NewClientSecurityData(),
+	}
+	c.transport.On("connect", c.connect)
+	return c
+}
+
+func (c *MCSClient) connect(selectedProtocol x224.Protocol) {
+	fmt.Println("mcs client on connect", selectedProtocol)
+	c.clientCoreData.ServerSelectedProtocol = uint32(selectedProtocol)
+
+	// sendConnectInitial
+	conferenceCreateRequest := []byte{}
+	connectInitial := NewConnectInitial(conferenceCreateRequest)
+	connectInitialBerEncoded, err := asn1.Marshal(connectInitial)
+	if err != nil {
+		c.Emit("error", errors.New(fmt.Sprintf("mcs sendConnectInitial ber encode error %v", err)))
+		return
+	}
+
+	_, err = c.transport.Write(connectInitialBerEncoded)
+	if err != nil {
+		c.Emit("error", errors.New(fmt.Sprintf("mcs sendConnectInitial write error %v", err)))
+		return
+	}
+	c.Once("data", c.recvConnectResponse)
+}
+
+func (m *MCSClient) recvConnectResponse(s []byte) {
+	fmt.Println("mcs recvConnectResponse", s)
 }

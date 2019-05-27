@@ -56,7 +56,7 @@ func (t *TPKT) Close() error {
 }
 
 func (t *TPKT) recvHeader(s []byte, err error) {
-	fmt.Println("recvHeader", s, err)
+	fmt.Println("tpkt recvHeader", s, err)
 	if err != nil {
 		t.Emit("error", err)
 		return
@@ -78,29 +78,31 @@ func (t *TPKT) recvHeader(s []byte, err error) {
 }
 
 func (t *TPKT) recvExtendedHeader(s []byte, err error) {
-	fmt.Println("recvExtendedHeader", s, err)
+	fmt.Println("tpkt recvExtendedHeader", s, err)
 	if err != nil {
 		return
 	}
 	r := bytes.NewReader(s)
 	size, _ := core.ReadUint16BE(r)
+	fmt.Println("tpkt wait recvData")
 	core.StartReadBytes(int(size-4), t.Conn, t.recvData)
 }
 
 func (t *TPKT) recvData(s []byte, err error) {
-	fmt.Println("recvData", s, err)
+	fmt.Println("tpkt recvData", s, err)
 	if err != nil {
 		return
 	}
 	t.Emit("data", s)
+	fmt.Println("tpkt wait recvHeader")
 	core.StartReadBytes(2, t.Conn, t.recvHeader)
 }
 
 func (t *TPKT) recvExtendedFastPathHeader(s []byte, length int, err error) {
-	fmt.Println("recvExtendedFastPathHeader", s, length, err)
+	fmt.Println("tpkt recvExtendedFastPathHeader", s, length, err)
 
 }
 
 func (t *TPKT) recvFastPath(s []byte, err error) {
-	fmt.Println("recvFastPath", s, err)
+	fmt.Println("tpkt recvFastPath", s, err)
 }

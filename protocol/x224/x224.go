@@ -194,6 +194,14 @@ func NewDataHeader() *DataHeader {
 	return &DataHeader{2, TPDU_DATA /* constant */, 0x80 /*constant*/}
 }
 
+func (h *DataHeader) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	core.WriteUInt8(h.Header, buff)
+	core.WriteByte(byte(h.MessageType), buff)
+	core.WriteUInt8(h.Separator, buff)
+	return buff.Bytes()
+}
+
 /**
  * Common X224 Automata
  * @param presentation {Layer} presentation layer
@@ -203,6 +211,7 @@ type X224 struct {
 	transport         core.Transport
 	requestedProtocol Protocol
 	selectedProtocol  Protocol
+	dataHeader        *DataHeader
 }
 
 func New(t core.Transport) *X224 {
@@ -211,6 +220,7 @@ func New(t core.Transport) *X224 {
 		t,
 		PROTOCOL_SSL,
 		PROTOCOL_SSL,
+		NewDataHeader(),
 	}
 
 	t.On("close", func() {
@@ -223,11 +233,14 @@ func New(t core.Transport) *X224 {
 }
 
 func (x *X224) Read(b []byte) (n int, err error) {
-	return 0, nil
+	return x.transport.Read(b)
 }
 
 func (x *X224) Write(b []byte) (n int, err error) {
-	return 0, nil
+	buff := bytes.Buffer{}
+	buff.Write(x.dataHeader.Serialize())
+	buff.Write(b)
+	return x.transport.Write(buff.Bytes())
 }
 
 func (x *X224) Close() error {
@@ -288,7 +301,9 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 		err := x.transport.(*tpkt.TPKT).Conn.StartTLS()
 		if err != nil {
 			fmt.Println("start tls failed", err)
+			return
 		}
+		x.Emit("connect", x.selectedProtocol)
 	}
 }
 
