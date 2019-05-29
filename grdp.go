@@ -15,7 +15,7 @@ type GrdpClient struct {
 	Host string // ip:port
 	tpkt *tpkt.TPKT
 	x224 *x224.X224
-	mcs  *t125.MCS
+	mcs  *t125.MCSClient
 }
 
 func NewClient(host string) *GrdpClient {
@@ -29,15 +29,20 @@ func (g *GrdpClient) Login(user, pwd string) error {
 	if err != nil {
 		return errors.New(fmt.Sprintf("[dial err] %v", err))
 	}
+	defer conn.Close()
 
 	g.tpkt = tpkt.New(core.NewSocketLayer(conn))
 	g.x224 = x224.New(g.tpkt)
-	g.mcs = t125.NewMCS(g.x224, t125.SEND_DATA_INDICATION, t125.SEND_DATA_REQUEST)
+	g.mcs = t125.NewMCSClient(g.x224)
 
 	err = g.x224.Connect()
 	if err != nil {
 		return errors.New(fmt.Sprintf("[x224 connect err] %v", err))
 	}
+
+	g.mcs.On("error", func(err error) {
+		fmt.Println(err)
+	})
 
 	time.Sleep(15 * time.Second)
 	return nil

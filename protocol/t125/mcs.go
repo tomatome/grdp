@@ -2,11 +2,11 @@ package t125
 
 import (
 	"bytes"
-	"encoding/asn1"
 	"errors"
 	"fmt"
 	"github.com/chuckpreslar/emission"
 	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/protocol/t125/ber"
 	"github.com/icodeface/grdp/protocol/t125/gcc"
 	"github.com/icodeface/grdp/protocol/x224"
 )
@@ -69,6 +69,19 @@ func NewDomainParameters(maxChannelIds int,
 		numPriorities, minThoughput, maxHeight, maxMCSPDUsize, protocolVersion}
 }
 
+func (d *DomainParameters) BER() []byte {
+	buff := &bytes.Buffer{}
+	ber.WriteInteger(d.MaxChannelIds, buff)
+	ber.WriteInteger(d.MaxUserIds, buff)
+	ber.WriteInteger(d.MaxTokenIds, buff)
+	ber.WriteInteger(1, buff)
+	ber.WriteInteger(0, buff)
+	ber.WriteInteger(1, buff)
+	ber.WriteInteger(d.MaxMCSPDUsize, buff)
+	ber.WriteInteger(2, buff)
+	return buff.Bytes()
+}
+
 /**
  * @see http://www.itu.int/rec/T-REC-T.125-199802-I/en page 25
  * @param userData {Buffer}
@@ -92,6 +105,18 @@ func NewConnectInitial(userData []byte) ConnectInitial {
 		*NewDomainParameters(1, 1, 1, 1, 0, 1, 0x420, 2),
 		*NewDomainParameters(0xffff, 0xfc17, 0xffff, 1, 0, 1, 0xffff, 2),
 		userData}
+}
+
+func (c *ConnectInitial) BER() []byte {
+	buff := &bytes.Buffer{}
+	ber.WriteOctetstring(string(c.CallingDomainSelector), buff)
+	ber.WriteOctetstring(string(c.CalledDomainSelector), buff)
+	ber.WriteBoolean(c.UpwardFlag, buff)
+	ber.WriteEncodedDomainParams(c.TargetParameters.BER(), buff)
+	ber.WriteEncodedDomainParams(c.MinimumParameters.BER(), buff)
+	ber.WriteEncodedDomainParams(c.MaximumParameters.BER(), buff)
+	ber.WriteOctetstring(string(c.UserData), buff)
+	return buff.Bytes()
 }
 
 /**
@@ -182,13 +207,13 @@ func (c *MCSClient) connect(selectedProtocol x224.Protocol) {
 
 	ccReq := gcc.MakeConferenceCreateRequest(userDataBuff.Bytes())
 	connectInitial := NewConnectInitial(ccReq)
-	connectInitialBerEncoded, err := asn1.Marshal(connectInitial)
-	if err != nil {
-		c.Emit("error", errors.New(fmt.Sprintf("mcs sendConnectInitial ber encode error %v", err)))
-		return
-	}
+	connectInitialBerEncoded := connectInitial.BER()
 
-	_, err = c.transport.Write(connectInitialBerEncoded)
+	dataBuff := &bytes.Buffer{}
+	ber.WriteApplicationTag(uint8(MCS_TYPE_CONNECT_INITIAL), len(connectInitialBerEncoded), dataBuff)
+	dataBuff.Write(connectInitialBerEncoded)
+
+	_, err := c.transport.Write(dataBuff.Bytes())
 	if err != nil {
 		c.Emit("error", errors.New(fmt.Sprintf("mcs sendConnectInitial write error %v", err)))
 		return
