@@ -63,6 +63,7 @@ func (t *TPKT) recvHeader(s []byte, err error) {
 	}
 	version := s[0]
 	if version == FASTPATH_ACTION_X224 {
+		fmt.Println("tptk recvHeader FASTPATH_ACTION_X224, wait for recvExtendedHeader")
 		core.StartReadBytes(2, t.Conn, t.recvExtendedHeader)
 	} else {
 		t.secFlag = (version >> 6) & 0x3
@@ -93,6 +94,7 @@ func (t *TPKT) recvData(s []byte, err error) {
 	if err != nil {
 		return
 	}
+	fmt.Println("tpkt emit data")
 	t.Emit("data", s)
 	fmt.Println("tpkt wait recvHeader")
 	core.StartReadBytes(2, t.Conn, t.recvHeader)

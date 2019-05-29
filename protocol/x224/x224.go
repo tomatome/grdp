@@ -309,7 +309,8 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 
 func (x *X224) recvData(s []byte) {
 	fmt.Println("x224 recvData", s)
-	// check header
+	// todo check header
 	//x224DataHeader().read(s);
-	//this.emit('data', s);
+	fmt.Println("x224 emit data")
+	x.Emit("data", s)
 }

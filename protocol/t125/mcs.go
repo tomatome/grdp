@@ -169,6 +169,14 @@ func NewMCS(t core.Transport, recvOpCode MCSDomainPDU, sendOpCode MCSDomainPDU) 
 	return m
 }
 
+func (x *MCS) Read(b []byte) (n int, err error) {
+	return x.transport.Read(b)
+}
+
+func (x *MCS) Write(b []byte) (n int, err error) {
+	return x.transport.Write(b)
+}
+
 func (m *MCS) Close() error {
 	return m.transport.Close()
 }
@@ -182,6 +190,9 @@ type MCSClient struct {
 	serverCoreData     *gcc.ServerCoreData
 	serverNetworkData  *gcc.ServerNetworkData
 	serverSecurityData *gcc.ServerSecurityData
+
+	channelsConnected int
+	userId            uint16
 }
 
 func NewMCSClient(t core.Transport) *MCSClient {
@@ -218,9 +229,51 @@ func (c *MCSClient) connect(selectedProtocol x224.Protocol) {
 		c.Emit("error", errors.New(fmt.Sprintf("mcs sendConnectInitial write error %v", err)))
 		return
 	}
-	c.Once("data", c.recvConnectResponse)
+	fmt.Println("mcs wait for data event")
+	c.transport.Once("data", c.recvConnectResponse)
 }
 
 func (m *MCSClient) recvConnectResponse(s []byte) {
 	fmt.Println("mcs recvConnectResponse", s)
+	// todo
+
+	// record server gcc block
+
+	// send domain request
+
+	// send attach user request
+	m.transport.Once("data", m.recvAttachUserConfirm)
+
+}
+
+func (m *MCSClient) recvAttachUserConfirm(s []byte) {
+	fmt.Println("mcs recvAttachUserConfirm")
+	// todo
+
+	//ask channel for specific user
+
+	// channel connect automata
+	m.connectChannels([]byte{})
+}
+
+func (m *MCSClient) connectChannels(s []byte) {
+	// todo
+
+	if m.channelsConnected == len(m.channels) {
+		m.transport.On("data", func(s []byte) {
+
+		})
+		// send client and sever gcc informations
+		// callback to sec
+		m.Emit("connect", m.userId, m.channels)
+	}
+
+	// sendChannelJoinRequest
+
+	m.transport.Once("data", m.recvChannelJoinConfirm)
+}
+
+func (m *MCSClient) recvChannelJoinConfirm(s []byte) {
+	// todo
+	m.connectChannels(s)
 }

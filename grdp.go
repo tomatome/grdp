@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/protocol/sec"
 	"github.com/icodeface/grdp/protocol/t125"
 	"github.com/icodeface/grdp/protocol/tpkt"
 	"github.com/icodeface/grdp/protocol/x224"
@@ -16,6 +17,7 @@ type GrdpClient struct {
 	tpkt *tpkt.TPKT
 	x224 *x224.X224
 	mcs  *t125.MCSClient
+	sec  *sec.Client
 }
 
 func NewClient(host string) *GrdpClient {
@@ -34,13 +36,14 @@ func (g *GrdpClient) Login(user, pwd string) error {
 	g.tpkt = tpkt.New(core.NewSocketLayer(conn))
 	g.x224 = x224.New(g.tpkt)
 	g.mcs = t125.NewMCSClient(g.x224)
+	g.sec = sec.NewClient(g.mcs)
 
 	err = g.x224.Connect()
 	if err != nil {
 		return errors.New(fmt.Sprintf("[x224 connect err] %v", err))
 	}
 
-	g.mcs.On("error", func(err error) {
+	g.sec.On("error", func(err error) {
 		fmt.Println(err)
 	})
 
