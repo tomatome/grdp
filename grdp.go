@@ -4,11 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/glog"
 	"github.com/icodeface/grdp/protocol/sec"
 	"github.com/icodeface/grdp/protocol/t125"
 	"github.com/icodeface/grdp/protocol/tpkt"
 	"github.com/icodeface/grdp/protocol/x224"
+	"log"
 	"net"
+	"os"
+	"sync"
 	"time"
 )
 
@@ -20,14 +24,17 @@ type GrdpClient struct {
 	sec  *sec.Client
 }
 
-func NewClient(host string) *GrdpClient {
+func NewClient(host string, logLevel glog.LEVEL) *GrdpClient {
+	glog.SetLevel(logLevel)
+	logger := log.New(os.Stdout, "", 0)
+	glog.SetLogger(logger)
 	return &GrdpClient{
 		Host: host,
 	}
 }
 
 func (g *GrdpClient) Login(user, pwd string) error {
-	conn, err := net.Dial("tcp", g.Host)
+	conn, err := net.DialTimeout("tcp", g.Host, 3*time.Second)
 	if err != nil {
 		return errors.New(fmt.Sprintf("[dial err] %v", err))
 	}
@@ -43,10 +50,23 @@ func (g *GrdpClient) Login(user, pwd string) error {
 		return errors.New(fmt.Sprintf("[x224 connect err] %v", err))
 	}
 
-	g.sec.On("error", func(err error) {
-		fmt.Println(err)
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+
+	g.sec.On("error", func(e error) {
+		err = e
+		glog.Error(e)
+		wg.Done()
+	}).On("close", func() {
+		err = errors.New("close")
+		glog.Info("close")
+		wg.Done()
+	}).On("connect", func() {
+		err = nil
+		glog.Info("connect")
+		wg.Done()
 	})
 
-	time.Sleep(15 * time.Second)
-	return nil
+	wg.Wait()
+	return err
 }

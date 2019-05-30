@@ -2,9 +2,9 @@ package tpkt
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/chuckpreslar/emission"
 	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/glog"
 )
 
 // take idea from https://github.com/Madnikulin50/gordp
@@ -47,7 +47,7 @@ func (t *TPKT) Write(data []byte) (n int, err error) {
 	core.WriteUInt8(0, buff)
 	core.WriteUInt16BE(uint16(len(data)+4), buff)
 	buff.Write(data)
-	fmt.Println("tpkt Write", buff.Bytes())
+	glog.Debug("tpkt Write", buff.Bytes())
 	return t.Conn.Write(buff.Bytes())
 }
 
@@ -56,14 +56,14 @@ func (t *TPKT) Close() error {
 }
 
 func (t *TPKT) recvHeader(s []byte, err error) {
-	fmt.Println("tpkt recvHeader", s, err)
+	glog.Debug("tpkt recvHeader", s, err)
 	if err != nil {
 		t.Emit("error", err)
 		return
 	}
 	version := s[0]
 	if version == FASTPATH_ACTION_X224 {
-		fmt.Println("tptk recvHeader FASTPATH_ACTION_X224, wait for recvExtendedHeader")
+		glog.Debug("tptk recvHeader FASTPATH_ACTION_X224, wait for recvExtendedHeader")
 		core.StartReadBytes(2, t.Conn, t.recvExtendedHeader)
 	} else {
 		t.secFlag = (version >> 6) & 0x3
@@ -79,32 +79,31 @@ func (t *TPKT) recvHeader(s []byte, err error) {
 }
 
 func (t *TPKT) recvExtendedHeader(s []byte, err error) {
-	fmt.Println("tpkt recvExtendedHeader", s, err)
+	glog.Debug("tpkt recvExtendedHeader", s, err)
 	if err != nil {
 		return
 	}
 	r := bytes.NewReader(s)
 	size, _ := core.ReadUint16BE(r)
-	fmt.Println("tpkt wait recvData")
+	glog.Debug("tpkt wait recvData")
 	core.StartReadBytes(int(size-4), t.Conn, t.recvData)
 }
 
 func (t *TPKT) recvData(s []byte, err error) {
-	fmt.Println("tpkt recvData", s, err)
+	glog.Debug("tpkt recvData", s, err)
 	if err != nil {
 		return
 	}
-	fmt.Println("tpkt emit data")
 	t.Emit("data", s)
-	fmt.Println("tpkt wait recvHeader")
+	glog.Debug("tpkt wait recvHeader")
 	core.StartReadBytes(2, t.Conn, t.recvHeader)
 }
 
 func (t *TPKT) recvExtendedFastPathHeader(s []byte, length int, err error) {
-	fmt.Println("tpkt recvExtendedFastPathHeader", s, length, err)
+	glog.Debug("tpkt recvExtendedFastPathHeader", s, length, err)
 
 }
 
 func (t *TPKT) recvFastPath(s []byte, err error) {
-	fmt.Println("tpkt recvFastPath", s, err)
+	glog.Debug("tpkt recvFastPath", s, err)
 }

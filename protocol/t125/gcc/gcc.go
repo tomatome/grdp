@@ -8,7 +8,6 @@ import (
 
 var t124_02_98_oid = []byte{0, 0, 20, 124, 0, 1}
 var h221_cs_key = "Duca"
-
 var h221_sc_key = "McDn"
 
 /**

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/chuckpreslar/emission"
 	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/glog"
 	"github.com/icodeface/grdp/protocol/t125/ber"
 	"github.com/icodeface/grdp/protocol/t125/gcc"
 	"github.com/icodeface/grdp/protocol/x224"
@@ -129,7 +130,6 @@ type ConnectResponse struct {
 	calledConnectId  int
 	domainParameters DomainParameters
 	userData         []byte `asn1: "tag:10"`
-	//.implicitTag(new asn1.spec.Asn1Tag(asn1.spec.TagClass.Application, asn1.spec.TagFormat.Constructed, 102));
 }
 
 func NewConnectResponse(userData []byte) *ConnectResponse {
@@ -207,7 +207,7 @@ func NewMCSClient(t core.Transport) *MCSClient {
 }
 
 func (c *MCSClient) connect(selectedProtocol x224.Protocol) {
-	fmt.Println("mcs client on connect", selectedProtocol)
+	glog.Debug("mcs client on connect", selectedProtocol)
 	c.clientCoreData.ServerSelectedProtocol = uint32(selectedProtocol)
 
 	// sendConnectInitial
@@ -229,12 +229,12 @@ func (c *MCSClient) connect(selectedProtocol x224.Protocol) {
 		c.Emit("error", errors.New(fmt.Sprintf("mcs sendConnectInitial write error %v", err)))
 		return
 	}
-	fmt.Println("mcs wait for data event")
+	glog.Debug("mcs wait for data event")
 	c.transport.Once("data", c.recvConnectResponse)
 }
 
 func (m *MCSClient) recvConnectResponse(s []byte) {
-	fmt.Println("mcs recvConnectResponse", s)
+	glog.Debug("mcs recvConnectResponse", s)
 	// todo
 
 	// record server gcc block
@@ -247,7 +247,7 @@ func (m *MCSClient) recvConnectResponse(s []byte) {
 }
 
 func (m *MCSClient) recvAttachUserConfirm(s []byte) {
-	fmt.Println("mcs recvAttachUserConfirm")
+	glog.Debug("mcs recvAttachUserConfirm")
 	// todo
 
 	//ask channel for specific user
