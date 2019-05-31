@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/tls"
+	"github.com/icodeface/grdp/glog"
 	"net"
 )
 
@@ -43,6 +44,7 @@ func (s *SocketLayer) Close() error {
 }
 
 func (s *SocketLayer) StartTLS() error {
+	glog.Info("StartTLS")
 	config := &tls.Config{
 		InsecureSkipVerify: true,
 	}

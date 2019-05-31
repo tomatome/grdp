@@ -256,19 +256,19 @@ func (c *ClientCoreData) GetType() Message {
 
 func (data *ClientCoreData) Block() []byte {
 	buff := &bytes.Buffer{}
-	core.WriteUInt16LE(CS_CORE, buff) // type
-	core.WriteUInt16LE(0xd8, buff)    // len
-
-	core.WriteUInt32LE(uint32(data.RdpVersion), buff)
-	core.WriteUInt16LE(data.DesktopWidth, buff)
-	core.WriteUInt16LE(data.DesktopHeight, buff)
-	core.WriteUInt16LE(uint16(data.ColorDepth), buff)
-	core.WriteUInt16LE(uint16(data.SasSequence), buff)
-	core.WriteUInt32LE(uint32(data.KbdLayout), buff)
-	core.WriteUInt32LE(data.ClientBuild, buff)
-	core.WriteBytes(data.ClientName[:], buff)
-	core.WriteUInt32LE(data.KeyboardType, buff)
-	core.WriteUInt32LE(data.KeyboardFnKeys, buff)
+	core.WriteUInt16LE(CS_CORE, buff)                  // 01C0
+	core.WriteUInt16LE(0xd8, buff)                     // d8
+	core.WriteUInt32LE(uint32(data.RdpVersion), buff)  // 00040008
+	core.WriteUInt16LE(data.DesktopWidth, buff)        // 0000
+	core.WriteUInt16LE(data.DesktopHeight, buff)       // 5200
+	core.WriteUInt16LE(uint16(data.ColorDepth), buff)  // 301c
+	core.WriteUInt16LE(uint16(data.SasSequence), buff) // a03a
+	core.WriteUInt32LE(uint32(data.KbdLayout), buff)   // a0904000
+	core.WriteUInt32LE(data.ClientBuild, buff)         // 0ce0e000
+	core.WriteBytes(data.ClientName[:], buff)          //
+	core.WriteUInt32LE(data.KeyboardType, buff)        //    00000004
+	core.WriteUInt32LE(data.KeyboardSubType, buff)     // 00000000
+	core.WriteUInt32LE(data.KeyboardFnKeys, buff)      //
 	core.WriteBytes(data.ImeFileName[:], buff)
 	core.WriteUInt16LE(uint16(data.PostBeta2ColorDepth), buff)
 	core.WriteUInt16LE(data.ClientProductId, buff)
@@ -282,6 +282,9 @@ func (data *ClientCoreData) Block() []byte {
 	core.WriteUInt32LE(data.ServerSelectedProtocol, buff)
 	return buff.Bytes()
 }
+
+// grdp:
+// rdpy: 01c0d800040008000005200301ca03aa09040000ce0e0000720064007000790000000000000000000000000000000000000000000000000004000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001ca01000000000018000f00010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000
 
 type ClientNetworkData struct {
 	ChannelCount    uint32
@@ -385,4 +388,18 @@ func MakeConferenceCreateRequest(userData []byte) []byte {
 	per.WriteOctetStream(h221_cs_key, 4, buff) // 00 44:75:63:61
 	per.WriteOctetStream(string(userData), 0, buff)
 	return buff.Bytes()
+}
+
+// rdpy: 000500147c000180fa000800100001c00044756361
+// userData below
+// 80ec01c0d800040008000005200301ca03aa09040000ce0e0000720064007000790000000000000000000000000000000000000000000000000004000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001ca01000000000018000f0001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000003c008000000000002c00c000b00000000000000
+
+// grdp: 000500147c000180f6000800100001c00044756361
+// userData below
+// 80e801c0d800040008000005200301ca03aa09040000ce0e00006d73747363000000000000000000000000000000000000000000000000000000040000000c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001ca01000000000018000f0001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000003c008000000000002c00c000b00000000000000
+
+func ReadConferenceCreateResponse(data []byte) []interface{} {
+	// todo
+	ret := make([]interface{}, 0)
+	return ret
 }

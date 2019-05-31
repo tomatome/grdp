@@ -2,6 +2,7 @@ package t125
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/chuckpreslar/emission"
@@ -9,7 +10,9 @@ import (
 	"github.com/icodeface/grdp/glog"
 	"github.com/icodeface/grdp/protocol/t125/ber"
 	"github.com/icodeface/grdp/protocol/t125/gcc"
+	"github.com/icodeface/grdp/protocol/t125/per"
 	"github.com/icodeface/grdp/protocol/x224"
+	"io"
 )
 
 // take idea from https://github.com/Madnikulin50/gordp
@@ -42,6 +45,20 @@ const (
 	MCS_GLOBAL_CHANNEL   MCSChannel = 1003
 	MCS_USERCHANNEL_BASE            = 1001
 )
+
+/**
+ * Format MCS PDU header packet
+ * @param mcsPdu {integer}
+ * @param options {integer}
+ * @returns {type.UInt8} headers
+ */
+func writeMCSPDUHeader(mcsPdu MCSDomainPDU, options uint8, w io.Writer) {
+	core.WriteUInt8((uint8(mcsPdu)<<2)|options, w)
+}
+
+func readMCSPDUHeader(options uint8, mcsPdu MCSDomainPDU) bool {
+	return (options >> 2) == uint8(mcsPdu)
+}
 
 type DomainParameters struct {
 	MaxChannelIds   int `asn1: "tag:2"`
@@ -139,6 +156,11 @@ func NewConnectResponse(userData []byte) *ConnectResponse {
 		userData}
 }
 
+func ReadConnectResponse(r io.Reader) (*ConnectResponse, error) {
+	// todo
+	return NewConnectResponse([]byte{}), nil
+}
+
 type MCSChannelInfo struct {
 	id   MCSChannel
 	name string
@@ -233,47 +255,121 @@ func (c *MCSClient) connect(selectedProtocol x224.Protocol) {
 	c.transport.Once("data", c.recvConnectResponse)
 }
 
-func (m *MCSClient) recvConnectResponse(s []byte) {
-	glog.Debug("mcs recvConnectResponse", s)
+func (c *MCSClient) recvConnectResponse(s []byte) {
+	glog.Debug("mcs recvConnectResponse", hex.EncodeToString(s))
 	// todo
+	cResp, err := ReadConnectResponse(bytes.NewReader(s))
+	if err != nil {
+		glog.Error(err)
+		c.Emit("error", err)
+		return
+	}
 
 	// record server gcc block
+	serverSettings := gcc.ReadConferenceCreateResponse(cResp.userData)
+	for _, v := range serverSettings {
+		switch v.(type) {
+		case gcc.ServerSecurityData:
+			{
+				c.serverSecurityData = v.(*gcc.ServerSecurityData)
+			}
+		case gcc.ServerCoreData:
+			{
+				c.serverCoreData = v.(*gcc.ServerCoreData)
+			}
+		case gcc.ServerNetworkData:
+			{
+				c.serverNetworkData = v.(*gcc.ServerNetworkData)
+			}
+		default:
+			err := errors.New(fmt.Sprintf("unhandle server gcc block %v %v", v, cResp.userData))
+			glog.Error(err)
+			c.Emit("error", err)
+			return
+		}
+	}
 
-	// send domain request
+	glog.Debug("mcs sendErectDomainRequest")
+	c.sendErectDomainRequest()
 
-	// send attach user request
-	m.transport.Once("data", m.recvAttachUserConfirm)
+	glog.Debug("mcs sendAttachUserRequest")
+	c.sendAttachUserRequest()
 
+	c.transport.Once("data", c.recvAttachUserConfirm)
 }
 
-func (m *MCSClient) recvAttachUserConfirm(s []byte) {
+func (c *MCSClient) sendErectDomainRequest() {
+	buff := &bytes.Buffer{}
+	writeMCSPDUHeader(ERECT_DOMAIN_REQUEST, 0, buff)
+	per.WriteInteger(0, buff)
+	per.WriteInteger(0, buff)
+	c.transport.Write(buff.Bytes())
+}
+
+func (c *MCSClient) sendAttachUserRequest() {
+	buff := &bytes.Buffer{}
+	writeMCSPDUHeader(ATTACH_USER_REQUEST, 0, buff)
+	c.transport.Write(buff.Bytes())
+}
+
+func (c *MCSClient) recvAttachUserConfirm(s []byte) {
 	glog.Debug("mcs recvAttachUserConfirm")
-	// todo
+	r := bytes.NewReader(s)
 
-	//ask channel for specific user
+	option, err := core.ReadUInt8(r)
+	if err != nil {
+		c.Emit("error", err)
+		return
+	}
 
-	// channel connect automata
-	m.connectChannels([]byte{})
+	if !readMCSPDUHeader(option, ATTACH_USER_CONFIRM) {
+		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_BAD_HEADER"))
+		return
+	}
+
+	e, err := per.ReadEnumerates(r)
+	if err != nil {
+		c.Emit("error", err)
+		return
+	}
+	if e != 0 {
+		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_REJECT_USER'"))
+		return
+	}
+
+	userId, _ := per.ReadInteger16(r)
+	userId += MCS_USERCHANNEL_BASE
+	c.userId = userId
+
+	c.channels = append(c.channels, MCSChannelInfo{MCSChannel(userId), "user"})
+	c.connectChannels()
 }
 
-func (m *MCSClient) connectChannels(s []byte) {
+func (c *MCSClient) connectChannels() {
 	// todo
-
-	if m.channelsConnected == len(m.channels) {
-		m.transport.On("data", func(s []byte) {
+	glog.Debug("mcs connectChannels")
+	if c.channelsConnected == len(c.channels) {
+		glog.Debug("msc connectChannels callback to sec")
+		c.transport.On("data", func(s []byte) {
 
 		})
 		// send client and sever gcc informations
 		// callback to sec
-		m.Emit("connect", m.userId, m.channels)
+		c.Emit("connect", c.userId, c.channels)
 	}
 
 	// sendChannelJoinRequest
-
-	m.transport.Once("data", m.recvChannelJoinConfirm)
+	c.sendChannelJoinRequest(c.channels[c.channelsConnected].id)
+	c.channelsConnected += 1
+	c.transport.Once("data", c.recvChannelJoinConfirm)
 }
 
-func (m *MCSClient) recvChannelJoinConfirm(s []byte) {
+func (c *MCSClient) sendChannelJoinRequest(channelId MCSChannel) {
+	glog.Debug("mcs sendChannelJoinRequest")
+}
+
+func (c *MCSClient) recvChannelJoinConfirm(s []byte) {
 	// todo
-	m.connectChannels(s)
+	glog.Debug("mcs recvChannelJoinConfirm")
+	c.connectChannels()
 }

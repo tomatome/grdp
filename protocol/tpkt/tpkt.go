@@ -2,6 +2,7 @@ package tpkt
 
 import (
 	"bytes"
+	"encoding/hex"
 	"github.com/chuckpreslar/emission"
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/glog"
@@ -56,7 +57,7 @@ func (t *TPKT) Close() error {
 }
 
 func (t *TPKT) recvHeader(s []byte, err error) {
-	glog.Debug("tpkt recvHeader", s, err)
+	glog.Debug("tpkt recvHeader", hex.EncodeToString(s), err)
 	if err != nil {
 		t.Emit("error", err)
 		return
@@ -79,7 +80,7 @@ func (t *TPKT) recvHeader(s []byte, err error) {
 }
 
 func (t *TPKT) recvExtendedHeader(s []byte, err error) {
-	glog.Debug("tpkt recvExtendedHeader", s, err)
+	glog.Debug("tpkt recvExtendedHeader", hex.EncodeToString(s), err)
 	if err != nil {
 		return
 	}
@@ -90,7 +91,7 @@ func (t *TPKT) recvExtendedHeader(s []byte, err error) {
 }
 
 func (t *TPKT) recvData(s []byte, err error) {
-	glog.Debug("tpkt recvData", s, err)
+	glog.Debug("tpkt recvData", hex.EncodeToString(s), err)
 	if err != nil {
 		return
 	}
@@ -100,7 +101,7 @@ func (t *TPKT) recvData(s []byte, err error) {
 }
 
 func (t *TPKT) recvExtendedFastPathHeader(s []byte, length int, err error) {
-	glog.Debug("tpkt recvExtendedFastPathHeader", s, length, err)
+	glog.Debug("tpkt recvExtendedFastPathHeader", hex.EncodeToString(s), length, err)
 
 }
 

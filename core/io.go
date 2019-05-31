@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/binary"
+	"encoding/hex"
+	"github.com/icodeface/grdp/glog"
 	"io"
 )
 
@@ -11,6 +13,7 @@ func StartReadBytes(len int, r io.Reader, cb ReadBytesComplete) {
 	b := make([]byte, len)
 	go func() {
 		_, err := io.ReadFull(r, b)
+		glog.Debug("GetBytes: ", hex.EncodeToString(b))
 		cb(b, err)
 	}()
 }

@@ -6,6 +6,27 @@ import (
 	"io"
 )
 
+func ReadEnumerates(r io.Reader) (uint8, error) {
+	return core.ReadUInt8(r)
+}
+
+func ReadInteger16(r io.Reader) (uint16, error) {
+	return core.ReadUint16BE(r)
+}
+
+func WriteInteger(n int, w io.Writer) {
+	if n <= 0xff {
+		WriteLength(1, w)
+		core.WriteUInt8(uint8(n), w)
+	} else if n <= 0xffff {
+		WriteLength(2, w)
+		core.WriteUInt16BE(uint16(n), w)
+	} else {
+		WriteLength(4, w)
+		core.WriteUInt32BE(uint32(n), w)
+	}
+}
+
 /**
  * @param choice {integer}
  * @returns {type.UInt8} choice per encoded

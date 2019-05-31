@@ -117,12 +117,13 @@ func (x *ClientConnectionRequestPDU) Serialize() []byte {
 	buff := &bytes.Buffer{}
 	core.WriteUInt8(x.Len, buff)
 	core.WriteUInt8(uint8(x.Code), buff)
-	core.WriteUInt16LE(x.Padding1, buff)
-	core.WriteUInt16LE(x.Padding2, buff)
+	core.WriteUInt16BE(x.Padding1, buff)
+	core.WriteUInt16BE(x.Padding2, buff)
 	core.WriteUInt8(x.Padding3, buff)
 	buff.Write(x.Cookie)
-	//if x.Len > 14: todo
-	core.WriteUInt16LE(0x0A0D, buff)
+	if x.Len > 14 {
+		core.WriteUInt16LE(0x0A0D, buff)
+	}
 	buff.Write(x.ProtocolNeg.Serialize())
 	return buff.Bytes()
 }
@@ -223,6 +224,7 @@ func (x *X224) Write(b []byte) (n int, err error) {
 	buff := bytes.Buffer{}
 	buff.Write(x.dataHeader.Serialize())
 	buff.Write(b)
+	glog.Debug("x224 write", hex.EncodeToString(buff.Bytes()))
 	return x.transport.Write(buff.Bytes())
 }
 
@@ -239,6 +241,9 @@ func (x *X224) Connect() error {
 	message.ProtocolNeg.Type = TYPE_RDP_NEG_REQ
 	message.ProtocolNeg.Result = uint32(x.requestedProtocol)
 
+	glog.Debug("x224 sendConnectionRequest", hex.EncodeToString(message.Serialize()))
+	// rdpy: 0ee000000000000100080001000000
+	// grdp: 10e000000000000d0a0100080001000000
 	_, err := x.transport.Write(message.Serialize())
 	x.transport.Once("data", x.recvConnectionConfirm)
 	return err
@@ -287,7 +292,7 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 }
 
 func (x *X224) recvData(s []byte) {
-	glog.Debug("x224 recvData", s)
+	glog.Debug("x224 recvData", hex.EncodeToString(s), "emit data")
 	// todo check header
 	//x224DataHeader().read(s);
 	x.Emit("data", s)
