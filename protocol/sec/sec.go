@@ -1,8 +1,8 @@
 package sec
 
 import (
-	"github.com/chuckpreslar/emission"
 	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/emission"
 )
 
 const (

@@ -3,8 +3,8 @@ package tpkt
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/chuckpreslar/emission"
 	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/emission"
 	"github.com/icodeface/grdp/glog"
 )
 
