@@ -293,7 +293,6 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 
 func (x *X224) recvData(s []byte) {
 	glog.Debug("x224 recvData", hex.EncodeToString(s), "emit data")
-	// todo check header
-	//x224DataHeader().read(s);
-	x.Emit("data", s)
+	// x224 header takes 3 bytes
+	x.Emit("data", s[3:])
 }
