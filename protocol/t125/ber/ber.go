@@ -2,6 +2,7 @@ package ber
 
 import (
 	"errors"
+	"fmt"
 	"github.com/icodeface/grdp/core"
 	"io"
 )
@@ -48,7 +49,7 @@ func ReadEnumerated(r io.Reader) (uint8, error) {
 		return 0, err
 	}
 	if len != 1 {
-		return 0, errors.New("enumerate size is wrong")
+		return 0, errors.New(fmt.Sprintf("enumerate size is wrong, get %v, expect 1", len))
 	}
 	return core.ReadUInt8(r)
 }

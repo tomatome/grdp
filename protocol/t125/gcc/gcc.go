@@ -251,10 +251,6 @@ func NewClientCoreData() *ClientCoreData {
 		RNS_UD_CS_SUPPORT_ERRINFO_PDU, [64]byte{}, 0, 0, 0}
 }
 
-func (c *ClientCoreData) GetType() Message {
-	return CS_CORE
-}
-
 func (data *ClientCoreData) Block() []byte {
 	buff := &bytes.Buffer{}
 	core.WriteUInt16LE(CS_CORE, buff)                  // 01C0
@@ -305,10 +301,6 @@ func (d *ClientNetworkData) Block() []byte {
 	return buff.Bytes()
 }
 
-func (c *ClientNetworkData) GetType() Message {
-	return CS_NET
-}
-
 type ClientSecurityData struct {
 	EncryptionMethods    uint32
 	ExtEncryptionMethods uint32
@@ -334,15 +326,12 @@ type ServerCoreData struct {
 	RdpVersion              VERSION
 	ClientRequestedProtocol uint32 //optional
 	EarlyCapabilityFlags    uint32 //optional
+	raw                     []byte
 }
 
 func NewServerCoreData() *ServerCoreData {
 	return &ServerCoreData{
-		RDP_VERSION_5_PLUS, 0, 0}
-}
-
-func (d *ServerCoreData) GetType() Message {
-	return SC_CORE
+		RDP_VERSION_5_PLUS, 0, 0, []byte{}}
 }
 
 func (d *ServerCoreData) Serialize() []byte {
@@ -357,22 +346,15 @@ func NewServerNetworkData() *ServerNetworkData {
 	return &ServerNetworkData{}
 }
 
-func (c *ServerNetworkData) GetType() Message {
-	return SC_NET
-}
-
 type ServerSecurityData struct {
 	EncryptionMethod uint32
 	EncryptionLevel  uint32
+	raw              []byte
 }
 
 func NewServerSecurityData() *ServerSecurityData {
 	return &ServerSecurityData{
-		0, 0}
-}
-
-func (c *ServerSecurityData) GetType() Message {
-	return SC_SECURITY
+		0, 0, []byte{}}
 }
 
 func MakeConferenceCreateRequest(userData []byte) []byte {

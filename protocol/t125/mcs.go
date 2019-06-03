@@ -395,7 +395,7 @@ func (c *MCSClient) connectChannels() {
 
 		serverData := make([]interface{}, 0)
 		serverData = append(serverData, c.serverCoreData)
-		serverData = append(serverData, c.clientSecurityData)
+		serverData = append(serverData, c.serverSecurityData)
 		glog.Debug("msc connectChannels callback to sec")
 		c.Emit("connect", clientData, serverData, c.userId, c.channels)
 		return
