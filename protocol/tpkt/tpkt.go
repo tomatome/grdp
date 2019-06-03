@@ -48,7 +48,7 @@ func (t *TPKT) Write(data []byte) (n int, err error) {
 	core.WriteUInt8(0, buff)
 	core.WriteUInt16BE(uint16(len(data)+4), buff)
 	buff.Write(data)
-	glog.Debug("tpkt Write", buff.Bytes())
+	glog.Debug("tpkt Write", hex.EncodeToString(buff.Bytes()))
 	return t.Conn.Write(buff.Bytes())
 }
 

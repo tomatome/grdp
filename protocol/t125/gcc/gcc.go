@@ -378,7 +378,7 @@ func MakeConferenceCreateRequest(userData []byte) []byte {
 	buff := &bytes.Buffer{}
 	per.WriteChoice(0, buff)                        // 00
 	per.WriteObjectIdentifier(t124_02_98_oid, buff) // 05:00:14:7c:00:01
-	per.WriteLength(uint16(len(userData)+14), buff)
+	per.WriteLength(len(userData)+14, buff)
 	per.WriteChoice(0, buff)                   // 00
 	per.WriteSelection(0x08, buff)             // 08
 	per.WriteNumericString("1", 1, buff)       // 00 10

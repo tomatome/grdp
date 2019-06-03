@@ -10,10 +10,6 @@ func ReadEnumerates(r io.Reader) (uint8, error) {
 	return core.ReadUInt8(r)
 }
 
-func ReadInteger16(r io.Reader) (uint16, error) {
-	return core.ReadUint16BE(r)
-}
-
 func WriteInteger(n int, w io.Writer) {
 	if n <= 0xff {
 		WriteLength(1, w)
@@ -25,6 +21,14 @@ func WriteInteger(n int, w io.Writer) {
 		WriteLength(4, w)
 		core.WriteUInt32BE(uint32(n), w)
 	}
+}
+
+func ReadInteger16(r io.Reader) (uint16, error) {
+	return core.ReadUint16BE(r)
+}
+
+func WriteInteger16(value uint16, w io.Writer) {
+	core.WriteUInt16BE(value, w)
 }
 
 /**
@@ -39,9 +43,9 @@ func WriteChoice(choice uint8, w io.Writer) {
  * @param value {raw} value to convert to per format
  * @returns type objects per encoding value
  */
-func WriteLength(value uint16, w io.Writer) {
+func WriteLength(value int, w io.Writer) {
 	if value > 0x7f {
-		core.WriteUInt16BE(value|0x8000, w)
+		core.WriteUInt16BE(uint16(value|0x8000), w)
 	} else {
 		core.WriteUInt8(uint8(value), w)
 	}
@@ -85,7 +89,7 @@ func WriteNumericString(s string, minValue int, w io.Writer) {
 		c2 = (c2 - 0x30) % 10
 		core.WriteUInt8(uint8((c1<<4)|c2), buff)
 	}
-	WriteLength(uint16(mLength), w)
+	WriteLength(mLength, w)
 	w.Write(buff.Bytes())
 }
 
@@ -110,6 +114,6 @@ func WriteOctetStream(oStr string, minValue int, w io.Writer) {
 	if length-minValue >= 0 {
 		mlength = length - minValue
 	}
-	WriteLength(uint16(mlength), w)
+	WriteLength(mlength, w)
 	w.Write([]byte(oStr)[:length])
 }

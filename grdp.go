@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -44,6 +45,9 @@ func (g *GrdpClient) Login(user, pwd string) error {
 	g.x224 = x224.New(g.tpkt)
 	g.mcs = t125.NewMCSClient(g.x224)
 	g.sec = sec.NewClient(g.mcs)
+	g.sec.SetUser(user)
+	g.sec.SetPwd(pwd)
+	g.sec.SetDomain(strings.Split(g.Host, ":")[0])
 
 	err = g.x224.Connect()
 	if err != nil {

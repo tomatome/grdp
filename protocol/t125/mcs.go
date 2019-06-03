@@ -39,11 +39,9 @@ const (
 	SEND_DATA_INDICATION                       = 26
 )
 
-type MCSChannel uint16
-
 const (
-	MCS_GLOBAL_CHANNEL   MCSChannel = 1003
-	MCS_USERCHANNEL_BASE            = 1001
+	MCS_GLOBAL_CHANNEL   uint16 = 1003
+	MCS_USERCHANNEL_BASE        = 1001
 )
 
 /**
@@ -162,7 +160,7 @@ func ReadConnectResponse(r io.Reader) (*ConnectResponse, error) {
 }
 
 type MCSChannelInfo struct {
-	id   MCSChannel
+	id   uint16
 	name string
 }
 
@@ -323,8 +321,8 @@ func (c *MCSClient) recvAttachUserConfirm(s []byte) {
 	}
 
 	if !readMCSPDUHeader(option, ATTACH_USER_CONFIRM) {
-		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_BAD_HEADER"))
-		return
+		//c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_BAD_HEADER"))
+		//return
 	}
 
 	e, err := per.ReadEnumerates(r)
@@ -333,29 +331,37 @@ func (c *MCSClient) recvAttachUserConfirm(s []byte) {
 		return
 	}
 	if e != 0 {
-		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_REJECT_USER'"))
-		return
+		//c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_REJECT_USER'"))
+		//return
 	}
 
 	userId, _ := per.ReadInteger16(r)
 	userId += MCS_USERCHANNEL_BASE
 	c.userId = userId
 
-	c.channels = append(c.channels, MCSChannelInfo{MCSChannel(userId), "user"})
+	c.channels = append(c.channels, MCSChannelInfo{userId, "user"})
 	c.connectChannels()
 }
 
 func (c *MCSClient) connectChannels() {
-	// todo
 	glog.Debug("mcs connectChannels")
 	if c.channelsConnected == len(c.channels) {
 		glog.Debug("msc connectChannels callback to sec")
 		c.transport.On("data", func(s []byte) {
-
+			fmt.Println("mcs on data", hex.EncodeToString(s))
 		})
-		// send client and sever gcc informations
-		// callback to sec
-		c.Emit("connect", c.userId, c.channels)
+		// send client and sever gcc informations callback to sec
+		clientData := make([]interface{}, 0)
+		clientData = append(clientData, c.clientCoreData)
+		clientData = append(clientData, c.clientSecurityData)
+		clientData = append(clientData, c.clientNetworkData)
+
+		serverData := make([]interface{}, 0)
+		serverData = append(serverData, c.serverCoreData)
+		serverData = append(serverData, c.clientSecurityData)
+
+		c.Emit("connect", clientData, serverData, c.userId, c.channels)
+		return
 	}
 
 	// sendChannelJoinRequest
@@ -364,12 +370,60 @@ func (c *MCSClient) connectChannels() {
 	c.transport.Once("data", c.recvChannelJoinConfirm)
 }
 
-func (c *MCSClient) sendChannelJoinRequest(channelId MCSChannel) {
+func (c *MCSClient) sendChannelJoinRequest(channelId uint16) {
 	glog.Debug("mcs sendChannelJoinRequest")
+	buff := &bytes.Buffer{}
+	writeMCSPDUHeader(CHANNEL_JOIN_REQUEST, 0, buff)
+	per.WriteInteger16(c.userId-MCS_USERCHANNEL_BASE, buff)
+	per.WriteInteger16(channelId, buff)
+	c.transport.Write(buff.Bytes())
 }
 
 func (c *MCSClient) recvChannelJoinConfirm(s []byte) {
-	// todo
 	glog.Debug("mcs recvChannelJoinConfirm")
+	r := bytes.NewReader(s)
+	option, err := core.ReadUInt8(r)
+	if err != nil {
+		c.Emit("error", err)
+		return
+	}
+
+	if !readMCSPDUHeader(option, CHANNEL_JOIN_CONFIRM) {
+		err := errors.New("NODE_RDP_PROTOCOL_T125_MCS_WAIT_CHANNEL_JOIN_CONFIRM")
+		glog.Error("skip err", err)
+		//c.Emit("error", err)
+		//return
+	}
+
+	confirm, _ := per.ReadEnumerates(r)
+	userId, _ := per.ReadInteger16(r)
+	userId += MCS_USERCHANNEL_BASE
+	if c.userId != userId {
+		err := errors.New("NODE_RDP_PROTOCOL_T125_MCS_INVALID_USER_ID")
+		glog.Error("skip err", err)
+		//c.Emit("error", err)
+		//return
+	}
+
+	channelId, _ := per.ReadInteger16(r)
+	if (confirm != 0) && (channelId == uint16(MCS_GLOBAL_CHANNEL) || channelId == c.userId) {
+		err := errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_MUST_CONFIRM_STATIC_CHANNEL")
+		glog.Error("skip err", err)
+		//c.Emit("error", err)
+		//return
+	}
+
 	c.connectChannels()
+}
+
+func (c *MCSClient) Write(data []byte) (n int, err error) {
+	// 64000303eb70810e40000000
+	buff := &bytes.Buffer{}
+	writeMCSPDUHeader(c.sendOpCode, 0, buff)
+	per.WriteInteger16(c.userId+MCS_USERCHANNEL_BASE, buff)
+	per.WriteInteger16(c.channels[0].id, buff)
+	core.WriteUInt8(0x70, buff)
+	per.WriteLength(len(data), buff)
+	core.WriteBytes(data, buff)
+	return c.transport.Write(buff.Bytes())
 }
