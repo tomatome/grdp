@@ -6,8 +6,10 @@ import (
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/emission"
 	"github.com/icodeface/grdp/glog"
+	"github.com/icodeface/grdp/protocol/lic"
 	"github.com/icodeface/grdp/protocol/t125"
 	"github.com/icodeface/grdp/protocol/t125/gcc"
+	"io"
 	"unicode/utf16"
 )
 
@@ -170,6 +172,13 @@ type SecurityHeader struct {
 	securityFlagHi uint16
 }
 
+func readSecurityHeader(r io.Reader) *SecurityHeader {
+	s := &SecurityHeader{}
+	s.securityFlag, _ = core.ReadUint16LE(r)
+	s.securityFlagHi, _ = core.ReadUint16LE(r)
+	return s
+}
+
 func NewSEC(t core.Transport) *SEC {
 	sec := &SEC{
 		*emission.NewEmitter(),
@@ -199,8 +208,7 @@ func (s *SEC) sendFlagged(flag uint16, data []byte) {
 
 type Client struct {
 	*SEC
-	userId    uint16
-	channelId uint16
+	userId uint16
 }
 
 func NewClient(t core.Transport) *Client {
@@ -241,15 +249,29 @@ func (c *Client) SetDomain(domain string) {
 
 func (c *Client) connect(clientData []interface{}, serverData []interface{}, userId uint16, channels []t125.MCSChannelInfo) {
 	glog.Debug("sec on connect")
-	// todo
 	c.clientData = clientData
 	c.serverData = serverData
 	c.userId = userId
-	c.channelId = 0
 	c.sendInfoPkt()
+	c.transport.On("global", c.recvLicenceInfo)
 }
 
 func (c *Client) sendInfoPkt() {
-	glog.Debug("sendInfoPkt", hex.EncodeToString(c.info.Serialize(true)))
 	c.sendFlagged(INFO_PKT, c.info.Serialize(c.clientData[0].(*gcc.ClientCoreData).RdpVersion == gcc.RDP_VERSION_5_PLUS))
+}
+
+func (c *Client) recvLicenceInfo(s []byte) {
+	glog.Debug("sec recvLicenceInfo", hex.EncodeToString(s))
+	r := bytes.NewReader(s)
+	if (readSecurityHeader(r).securityFlag & LICENSE_PKT) <= 0 {
+		glog.Error("sec NODE_RDP_PROTOCOL_PDU_SEC_BAD_LICENSE_HEADER")
+		//c.Emit("error", errors.New("NODE_RDP_PROTOCOL_PDU_SEC_BAD_LICENSE_HEADER"))
+		//return
+	}
+
+	if lic.ReceiveLicensePacket(r) {
+		c.Emit("success")
+	} else {
+		glog.Error("check ReceiveLicensePacket failed")
+	}
 }

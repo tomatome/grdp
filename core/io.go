@@ -61,6 +61,15 @@ func ReadUInt32LE(r io.Reader) (uint32, error) {
 	return binary.LittleEndian.Uint32(b), nil
 }
 
+func ReadUInt32BE(r io.Reader) (uint32, error) {
+	b := make([]byte, 4)
+	_, err := io.ReadFull(r, b)
+	if err != nil {
+		return 0, nil
+	}
+	return binary.BigEndian.Uint32(b), nil
+}
+
 func WriteByte(data byte, w io.Writer) (int, error) {
 	b := make([]byte, 1)
 	b[0] = byte(data)
