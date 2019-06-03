@@ -73,7 +73,8 @@ type DomainParameters struct {
  * @see http://www.itu.int/rec/T-REC-T.125-199802-I/en page 25
  * @returns {asn1.univ.Sequence}
  */
-func NewDomainParameters(maxChannelIds int,
+func NewDomainParameters(
+	maxChannelIds int,
 	maxUserIds int,
 	maxTokenIds int,
 	numPriorities int,
@@ -96,6 +97,24 @@ func (d *DomainParameters) BER() []byte {
 	ber.WriteInteger(d.MaxMCSPDUsize, buff)
 	ber.WriteInteger(2, buff)
 	return buff.Bytes()
+}
+
+func ReadDomainParameters(r io.Reader) (*DomainParameters, error) {
+	if !ber.ReadUniversalTag(ber.TAG_SEQUENCE, true, r) {
+		return nil, errors.New("bad BER tags")
+	}
+	d := &DomainParameters{}
+	ber.ReadLength(r)
+
+	d.MaxChannelIds, _ = ber.ReadInteger(r)
+	d.MaxUserIds, _ = ber.ReadInteger(r)
+	d.MaxTokenIds, _ = ber.ReadInteger(r)
+	ber.ReadInteger(r)
+	ber.ReadInteger(r)
+	ber.ReadInteger(r)
+	d.MaxMCSPDUsize, _ = ber.ReadInteger(r)
+	ber.ReadInteger(r)
+	return d, nil
 }
 
 /**
@@ -143,20 +162,38 @@ func (c *ConnectInitial) BER() []byte {
 type ConnectResponse struct {
 	result           int `asn1: "tag:10"`
 	calledConnectId  int
-	domainParameters DomainParameters
+	domainParameters *DomainParameters
 	userData         []byte `asn1: "tag:10"`
 }
 
 func NewConnectResponse(userData []byte) *ConnectResponse {
 	return &ConnectResponse{0,
 		0,
-		*NewDomainParameters(22, 3, 0, 1, 0, 1, 0xfff8, 2),
+		NewDomainParameters(22, 3, 0, 1, 0, 1, 0xfff8, 2),
 		userData}
 }
 
 func ReadConnectResponse(r io.Reader) (*ConnectResponse, error) {
-	// todo
-	return NewConnectResponse([]byte{}), nil
+	c := &ConnectResponse{}
+	_, err := ber.ReadApplicationTag(MCS_TYPE_CONNECT_RESPONSE, r)
+	if err != nil {
+		return nil, err
+	}
+	_, err = ber.ReadEnumerated(r)
+	if err != nil {
+		return nil, err
+	}
+	ber.ReadInteger(r)
+	c.domainParameters, err = ReadDomainParameters(r)
+	if err != nil {
+		return nil, err
+	}
+	if !ber.ReadUniversalTag(ber.TAG_OCTET_STRING, false, r) {
+		return nil, errors.New("invalid expected BER tag")
+	}
+	dataLen, _ := ber.ReadLength(r)
+	c.userData, err = core.ReadBytes(dataLen, r)
+	return c, err
 }
 
 type MCSChannelInfo struct {
@@ -254,8 +291,7 @@ func (c *MCSClient) connect(selectedProtocol x224.Protocol) {
 }
 
 func (c *MCSClient) recvConnectResponse(s []byte) {
-	glog.Debug("mcs recvConnectResponse", hex.EncodeToString(s))
-	// todo
+	glog.Debug("mcs recvConnectResponse todo", hex.EncodeToString(s))
 	cResp, err := ReadConnectResponse(bytes.NewReader(s))
 	if err != nil {
 		glog.Error(err)
@@ -311,7 +347,7 @@ func (c *MCSClient) sendAttachUserRequest() {
 }
 
 func (c *MCSClient) recvAttachUserConfirm(s []byte) {
-	glog.Debug("mcs recvAttachUserConfirm")
+	glog.Debug("mcs recvAttachUserConfirm", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
 
 	option, err := core.ReadUInt8(r)
@@ -321,7 +357,9 @@ func (c *MCSClient) recvAttachUserConfirm(s []byte) {
 	}
 
 	if !readMCSPDUHeader(option, ATTACH_USER_CONFIRM) {
-		//c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_BAD_HEADER"))
+		err := errors.New("NODE_RDP_PROTOCOL_T125_MCS_BAD_HEADER")
+		glog.Error("skip err", err)
+		//c.Emit("error", err)
 		//return
 	}
 
@@ -331,6 +369,8 @@ func (c *MCSClient) recvAttachUserConfirm(s []byte) {
 		return
 	}
 	if e != 0 {
+		err := errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_REJECT_USER")
+		glog.Error("skip err", err)
 		//c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_REJECT_USER'"))
 		//return
 	}
@@ -346,10 +386,7 @@ func (c *MCSClient) recvAttachUserConfirm(s []byte) {
 func (c *MCSClient) connectChannels() {
 	glog.Debug("mcs connectChannels")
 	if c.channelsConnected == len(c.channels) {
-		glog.Debug("msc connectChannels callback to sec")
-		c.transport.On("data", func(s []byte) {
-			fmt.Println("mcs on data", hex.EncodeToString(s))
-		})
+		c.transport.On("data", c.recvData)
 		// send client and sever gcc informations callback to sec
 		clientData := make([]interface{}, 0)
 		clientData = append(clientData, c.clientCoreData)
@@ -359,7 +396,7 @@ func (c *MCSClient) connectChannels() {
 		serverData := make([]interface{}, 0)
 		serverData = append(serverData, c.serverCoreData)
 		serverData = append(serverData, c.clientSecurityData)
-
+		glog.Debug("msc connectChannels callback to sec")
 		c.Emit("connect", clientData, serverData, c.userId, c.channels)
 		return
 	}
@@ -379,8 +416,53 @@ func (c *MCSClient) sendChannelJoinRequest(channelId uint16) {
 	c.transport.Write(buff.Bytes())
 }
 
+func (c *MCSClient) recvData(s []byte) {
+	glog.Debug("msc on data recvData")
+
+	r := bytes.NewReader(s)
+	option, err := core.ReadUInt8(r)
+	if err != nil {
+		c.Emit("error", err)
+		return
+	}
+
+	if readMCSPDUHeader(option, DISCONNECT_PROVIDER_ULTIMATUM) {
+		c.Emit("error", errors.New("MCS DISCONNECT_PROVIDER_ULTIMATUM"))
+		c.transport.Close()
+		return
+	} else if !readMCSPDUHeader(option, c.recvOpCode) {
+		c.Emit("error", errors.New("Invalid expected MCS opcode receive data"))
+		return
+	}
+
+	userId, _ := per.ReadInteger16(r)
+	userId += MCS_USERCHANNEL_BASE
+
+	channelId, _ := per.ReadInteger16(r)
+
+	per.ReadEnumerates(r)
+	per.ReadLength(r)
+
+	// channel id doesn't match a requested layer
+	found := false
+	channelName := ""
+	for _, channel := range c.channels {
+		if channel.id == channelId {
+			found = true
+			channelName = channel.name
+			break
+		}
+	}
+	if !found {
+		glog.Error("mcs receive data for an unconnected layer")
+		return
+	}
+	glog.Debug("mcs emit channel", channelName)
+	c.Emit(channelName, s)
+}
+
 func (c *MCSClient) recvChannelJoinConfirm(s []byte) {
-	glog.Debug("mcs recvChannelJoinConfirm")
+	glog.Debug("mcs recvChannelJoinConfirm", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
 	option, err := core.ReadUInt8(r)
 	if err != nil {
@@ -389,28 +471,22 @@ func (c *MCSClient) recvChannelJoinConfirm(s []byte) {
 	}
 
 	if !readMCSPDUHeader(option, CHANNEL_JOIN_CONFIRM) {
-		err := errors.New("NODE_RDP_PROTOCOL_T125_MCS_WAIT_CHANNEL_JOIN_CONFIRM")
-		glog.Error("skip err", err)
-		//c.Emit("error", err)
-		//return
+		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_WAIT_CHANNEL_JOIN_CONFIRM"))
+		return
 	}
 
 	confirm, _ := per.ReadEnumerates(r)
 	userId, _ := per.ReadInteger16(r)
 	userId += MCS_USERCHANNEL_BASE
 	if c.userId != userId {
-		err := errors.New("NODE_RDP_PROTOCOL_T125_MCS_INVALID_USER_ID")
-		glog.Error("skip err", err)
-		//c.Emit("error", err)
-		//return
+		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_INVALID_USER_ID"))
+		return
 	}
 
 	channelId, _ := per.ReadInteger16(r)
 	if (confirm != 0) && (channelId == uint16(MCS_GLOBAL_CHANNEL) || channelId == c.userId) {
-		err := errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_MUST_CONFIRM_STATIC_CHANNEL")
-		glog.Error("skip err", err)
-		//c.Emit("error", err)
-		//return
+		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_MUST_CONFIRM_STATIC_CHANNEL"))
+		return
 	}
 
 	c.connectChannels()

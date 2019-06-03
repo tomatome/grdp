@@ -3,6 +3,7 @@ package gcc
 import (
 	"bytes"
 	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/glog"
 	"github.com/icodeface/grdp/protocol/t125/per"
 )
 
@@ -400,6 +401,7 @@ func MakeConferenceCreateRequest(userData []byte) []byte {
 
 func ReadConferenceCreateResponse(data []byte) []interface{} {
 	// todo
+	glog.Debug("ReadConferenceCreateResponse todo")
 	ret := make([]interface{}, 0)
 	return ret
 }

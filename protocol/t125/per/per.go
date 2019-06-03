@@ -51,6 +51,23 @@ func WriteLength(value int, w io.Writer) {
 	}
 }
 
+func ReadLength(r io.Reader) (uint16, error) {
+	b, err := core.ReadUInt8(r)
+	if err != nil {
+		return 0, nil
+	}
+	var size uint16
+	if b&0x80 > 0 {
+		b = b &^ 0x80
+		size = uint16(b) << 8
+		left, _ := core.ReadUInt8(r)
+		size += uint16(left)
+	} else {
+		size = uint16(b)
+	}
+	return size, nil
+}
+
 /**
  * @param oid {array} oid to write
  * @returns {type.Component} per encoded object identifier
