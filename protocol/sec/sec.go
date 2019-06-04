@@ -3,6 +3,7 @@ package sec
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/emission"
 	"github.com/icodeface/grdp/glog"
@@ -253,7 +254,7 @@ func (c *Client) connect(clientData []interface{}, serverData []interface{}, use
 	c.serverData = serverData
 	c.userId = userId
 	c.sendInfoPkt()
-	c.transport.On("global", c.recvLicenceInfo)
+	c.transport.Once("global", c.recvLicenceInfo)
 }
 
 func (c *Client) sendInfoPkt() {
@@ -264,14 +265,47 @@ func (c *Client) recvLicenceInfo(s []byte) {
 	glog.Debug("sec recvLicenceInfo", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
 	if (readSecurityHeader(r).securityFlag & LICENSE_PKT) <= 0 {
-		glog.Error("sec NODE_RDP_PROTOCOL_PDU_SEC_BAD_LICENSE_HEADER")
-		//c.Emit("error", errors.New("NODE_RDP_PROTOCOL_PDU_SEC_BAD_LICENSE_HEADER"))
-		//return
+		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_PDU_SEC_BAD_LICENSE_HEADER"))
+		return
 	}
 
-	if lic.ReceiveLicensePacket(r) {
+	p := lic.ReadLicensePacket(r)
+
+	switch p.BMsgtype {
+	case lic.NEW_LICENSE:
+		glog.Info("sec NEW_LICENSE")
 		c.Emit("success")
-	} else {
-		glog.Error("check ReceiveLicensePacket failed")
+		return
+	case lic.ERROR_ALERT:
+		glog.Info("sec ERROR_ALERT")
+		message := p.LicensingMessage.(*lic.ErrorMessage)
+		if message.DwErrorCode == lic.STATUS_VALID_CLIENT && message.DwStateTransaction == lic.ST_NO_TRANSITION {
+			c.transport.Once("global", c.recvData)
+			return
+		}
+		glog.Info("ReceiveLicensePacket error alert")
+	case lic.LICENSE_REQUEST:
+		c.sendClientNewLicenseRequest()
+		c.transport.Once("global", c.recvLicenceInfo)
+	case lic.PLATFORM_CHALLENGE:
+		c.sendClientChallengeResponse()
+		c.transport.Once("global", c.recvLicenceInfo)
+	default:
+		glog.Error("Not a valid license packet")
+		c.Emit("error", errors.New("Not a valid license packet"))
+		return
 	}
+}
+
+func (c *Client) sendClientNewLicenseRequest() {
+	glog.Debug("sec sendClientNewLicenseRequest todo")
+
+}
+
+func (c *Client) sendClientChallengeResponse() {
+	glog.Debug("sec sendClientChallengeResponse todo")
+}
+
+func (c *Client) recvData(s []byte) {
+	c.Emit("data", s)
 }

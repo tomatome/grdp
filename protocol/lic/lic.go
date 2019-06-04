@@ -2,7 +2,6 @@ package lic
 
 import (
 	"github.com/icodeface/grdp/core"
-	"github.com/icodeface/grdp/glog"
 	"io"
 )
 
@@ -17,34 +16,58 @@ const (
 	ERROR_ALERT                 = 0xFF
 )
 
+// error code
+const (
+	ERR_INVALID_SERVER_CERTIFICATE = 0x00000001
+	ERR_NO_LICENSE                 = 0x00000002
+	ERR_INVALID_SCOPE              = 0x00000004
+	ERR_NO_LICENSE_SERVER          = 0x00000006
+	STATUS_VALID_CLIENT            = 0x00000007
+	ERR_INVALID_CLIENT             = 0x00000008
+	ERR_INVALID_PRODUCTID          = 0x0000000B
+	ERR_INVALID_MESSAGE_LEN        = 0x0000000C
+	ERR_INVALID_MAC                = 0x00000003
+)
+
+// state transition
+const (
+	ST_TOTAL_ABORT          = 0x00000001
+	ST_NO_TRANSITION        = 0x00000002
+	ST_RESET_PHASE_TO_START = 0x00000003
+	ST_RESEND_LAST_MESSAGE  = 0x00000004
+)
+
+type ErrorMessage struct {
+	DwErrorCode        uint32
+	DwStateTransaction uint32
+	Blob               []byte
+}
+
+func readErrorMessage(r io.Reader) *ErrorMessage {
+	m := &ErrorMessage{}
+	m.DwErrorCode, _ = core.ReadUInt32LE(r)
+	m.DwStateTransaction, _ = core.ReadUInt32LE(r)
+	return m
+}
+
 type LicensePacket struct {
-	bMsgtype         uint8
+	BMsgtype         uint8
 	Flag             uint8
-	wMsgSize         uint16
-	LicensingMessage []byte
+	WMsgSize         uint16
+	LicensingMessage interface{}
 }
 
-func readLicensePacket(r io.Reader) *LicensePacket {
+func ReadLicensePacket(r io.Reader) *LicensePacket {
 	l := &LicensePacket{}
-	l.bMsgtype, _ = core.ReadUInt8(r)
+	l.BMsgtype, _ = core.ReadUInt8(r)
 	l.Flag, _ = core.ReadUInt8(r)
-	l.wMsgSize, _ = core.ReadUint16LE(r)
-	l.LicensingMessage, _ = core.ReadBytes(int(l.wMsgSize-4), r)
-	return l
-}
+	l.WMsgSize, _ = core.ReadUint16LE(r)
 
-func ReceiveLicensePacket(r io.Reader) bool {
-	p := readLicensePacket(r)
-	glog.Debug("ReceiveLicensePacket type is", p.bMsgtype)
-	switch p.bMsgtype {
-	case NEW_LICENSE:
-		return true
-	case LICENSE_REQUEST, PLATFORM_CHALLENGE:
-		return false
+	switch l.BMsgtype {
 	case ERROR_ALERT:
-		glog.Info("ReceiveLicensePacket error alert")
-		return true
+		l.LicensingMessage = readErrorMessage(r)
 	default:
-		return false
+		l.LicensingMessage, _ = core.ReadBytes(int(l.WMsgSize-4), r)
 	}
+	return l
 }
