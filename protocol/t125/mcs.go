@@ -358,10 +358,8 @@ func (c *MCSClient) recvAttachUserConfirm(s []byte) {
 	}
 
 	if !readMCSPDUHeader(option, ATTACH_USER_CONFIRM) {
-		err := errors.New("NODE_RDP_PROTOCOL_T125_MCS_BAD_HEADER")
-		glog.Error("skip err", err)
-		//c.Emit("error", err)
-		//return
+		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_BAD_HEADER"))
+		return
 	}
 
 	e, err := per.ReadEnumerates(r)
@@ -370,10 +368,8 @@ func (c *MCSClient) recvAttachUserConfirm(s []byte) {
 		return
 	}
 	if e != 0 {
-		err := errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_REJECT_USER")
-		glog.Error("skip err", err)
-		//c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_REJECT_USER'"))
-		//return
+		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_T125_MCS_SERVER_REJECT_USER'"))
+		return
 	}
 
 	userId, _ := per.ReadInteger16(r)
