@@ -159,15 +159,6 @@ func (o *RDPInfo) Serialize(hasExtended bool) []byte {
 	return buff.Bytes()
 }
 
-type SEC struct {
-	emission.Emitter
-	transport   core.Transport
-	info        *RDPInfo
-	machineName string
-	clientData  []interface{}
-	serverData  []interface{}
-}
-
 type SecurityHeader struct {
 	securityFlag   uint16
 	securityFlagHi uint16
@@ -178,6 +169,15 @@ func readSecurityHeader(r io.Reader) *SecurityHeader {
 	s.securityFlag, _ = core.ReadUint16LE(r)
 	s.securityFlagHi, _ = core.ReadUint16LE(r)
 	return s
+}
+
+type SEC struct {
+	emission.Emitter
+	transport   core.Transport
+	info        *RDPInfo
+	machineName string
+	clientData  []interface{}
+	serverData  []interface{}
 }
 
 func NewSEC(t core.Transport) *SEC {
@@ -196,6 +196,18 @@ func NewSEC(t core.Transport) *SEC {
 		sec.Emit("error", err)
 	})
 	return sec
+}
+
+func (s *SEC) Read(b []byte) (n int, err error) {
+	return s.transport.Read(b)
+}
+
+func (s *SEC) Write(b []byte) (n int, err error) {
+	return s.transport.Write(b)
+}
+
+func (s *SEC) Close() error {
+	return s.transport.Close()
 }
 
 func (s *SEC) sendFlagged(flag uint16, data []byte) {
@@ -275,26 +287,34 @@ func (c *Client) recvLicenceInfo(s []byte) {
 	case lic.NEW_LICENSE:
 		glog.Info("sec NEW_LICENSE")
 		c.Emit("success")
-		return
+		goto connect
 	case lic.ERROR_ALERT:
 		glog.Info("sec ERROR_ALERT")
 		message := p.LicensingMessage.(*lic.ErrorMessage)
 		if message.DwErrorCode == lic.STATUS_VALID_CLIENT && message.DwStateTransaction == lic.ST_NO_TRANSITION {
-			c.transport.Once("global", c.recvData)
-			return
+			goto connect
 		}
-		glog.Info("ReceiveLicensePacket error alert")
+		goto retry
 	case lic.LICENSE_REQUEST:
 		c.sendClientNewLicenseRequest()
-		c.transport.Once("global", c.recvLicenceInfo)
+		goto retry
 	case lic.PLATFORM_CHALLENGE:
 		c.sendClientChallengeResponse()
-		c.transport.Once("global", c.recvLicenceInfo)
+		goto retry
 	default:
 		glog.Error("Not a valid license packet")
 		c.Emit("error", errors.New("Not a valid license packet"))
 		return
 	}
+
+connect:
+	c.transport.Once("global", c.recvData)
+	c.Emit("connect", c.clientData[0].(*gcc.ClientCoreData), c.userId)
+	return
+
+retry:
+	c.transport.Once("global", c.recvLicenceInfo)
+	return
 }
 
 func (c *Client) sendClientNewLicenseRequest() {
@@ -307,5 +327,6 @@ func (c *Client) sendClientChallengeResponse() {
 }
 
 func (c *Client) recvData(s []byte) {
+	glog.Debug("sec recvData", hex.EncodeToString(s))
 	c.Emit("data", s)
 }

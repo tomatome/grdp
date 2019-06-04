@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/glog"
+	"github.com/icodeface/grdp/protocol/pdu"
 	"github.com/icodeface/grdp/protocol/sec"
 	"github.com/icodeface/grdp/protocol/t125"
 	"github.com/icodeface/grdp/protocol/tpkt"
@@ -23,6 +24,7 @@ type GrdpClient struct {
 	x224 *x224.X224
 	mcs  *t125.MCSClient
 	sec  *sec.Client
+	pdu  *pdu.Client
 }
 
 func NewClient(host string, logLevel glog.LEVEL) *GrdpClient {
@@ -45,6 +47,8 @@ func (g *GrdpClient) Login(user, pwd string) error {
 	g.x224 = x224.New(g.tpkt)
 	g.mcs = t125.NewMCSClient(g.x224)
 	g.sec = sec.NewClient(g.mcs)
+	g.pdu = pdu.NewClient(g.sec)
+
 	g.sec.SetUser(user)
 	g.sec.SetPwd(pwd)
 	g.sec.SetDomain(strings.Split(g.Host, ":")[0])
@@ -57,7 +61,7 @@ func (g *GrdpClient) Login(user, pwd string) error {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 
-	g.sec.On("error", func(e error) {
+	g.pdu.On("error", func(e error) {
 		err = e
 		glog.Error(e)
 		wg.Done()
@@ -65,9 +69,9 @@ func (g *GrdpClient) Login(user, pwd string) error {
 		err = errors.New("close")
 		glog.Info("close")
 		wg.Done()
-	}).On("connect", func() {
+	}).On("success", func() {
 		err = nil
-		glog.Info("connect")
+		glog.Info("success")
 		wg.Done()
 	})
 

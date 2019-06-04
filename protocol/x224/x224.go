@@ -233,7 +233,6 @@ func (x *X224) Close() error {
 }
 
 func (x *X224) Connect() error {
-	glog.Debug("x224 Connect")
 	if x.transport == nil {
 		return errors.New("no transport")
 	}
