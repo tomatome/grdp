@@ -44,12 +44,12 @@ func ReadEnumerated(r io.Reader) (uint8, error) {
 	if !ReadUniversalTag(TAG_ENUMERATED, false, r) {
 		return 0, errors.New("invalid ber tag")
 	}
-	len, err := ReadLength(r)
+	length, err := ReadLength(r)
 	if err != nil {
 		return 0, err
 	}
-	if len != 1 {
-		return 0, errors.New(fmt.Sprintf("enumerate size is wrong, get %v, expect 1", len))
+	if length != 1 {
+		return 0, errors.New(fmt.Sprintf("enumerate size is wrong, get %v, expect 1", length))
 	}
 	return core.ReadUInt8(r)
 }
@@ -83,6 +83,8 @@ func ReadLength(r io.Reader) (int, error) {
 		} else {
 			return 0, errors.New("BER length may be 1 or 2")
 		}
+	} else {
+		ret = int(size)
 	}
 	return ret, nil
 }

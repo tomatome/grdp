@@ -160,7 +160,7 @@ func (c *ConnectInitial) BER() []byte {
  */
 
 type ConnectResponse struct {
-	result           int `asn1: "tag:10"`
+	result           uint8 `asn1: "tag:10"`
 	calledConnectId  int
 	domainParameters *DomainParameters
 	userData         []byte `asn1: "tag:10"`
@@ -175,15 +175,17 @@ func NewConnectResponse(userData []byte) *ConnectResponse {
 
 func ReadConnectResponse(r io.Reader) (*ConnectResponse, error) {
 	c := &ConnectResponse{}
-	_, err := ber.ReadApplicationTag(MCS_TYPE_CONNECT_RESPONSE, r)
+	var err error
+	_, err = ber.ReadApplicationTag(MCS_TYPE_CONNECT_RESPONSE, r)
 	if err != nil {
 		return nil, err
 	}
-	_, err = ber.ReadEnumerated(r)
+	c.result, err = ber.ReadEnumerated(r)
 	if err != nil {
 		return nil, err
 	}
-	ber.ReadInteger(r)
+
+	c.calledConnectId, err = ber.ReadInteger(r)
 	c.domainParameters, err = ReadDomainParameters(r)
 	if err != nil {
 		return nil, err
@@ -291,11 +293,10 @@ func (c *MCSClient) connect(selectedProtocol x224.Protocol) {
 }
 
 func (c *MCSClient) recvConnectResponse(s []byte) {
-	glog.Debug("mcs recvConnectResponse todo", hex.EncodeToString(s))
+	glog.Debug("mcs recvConnectResponse", hex.EncodeToString(s))
 	cResp, err := ReadConnectResponse(bytes.NewReader(s))
 	if err != nil {
-		glog.Error(err)
-		c.Emit("error", err)
+		c.Emit("error", errors.New(fmt.Sprintf("ReadConnectResponse %v", err)))
 		return
 	}
 
