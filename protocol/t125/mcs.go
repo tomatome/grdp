@@ -438,7 +438,7 @@ func (c *MCSClient) recvData(s []byte) {
 	channelId, _ := per.ReadInteger16(r)
 
 	per.ReadEnumerates(r)
-	per.ReadLength(r)
+	size, _ := per.ReadLength(r)
 
 	// channel id doesn't match a requested layer
 	found := false
@@ -454,8 +454,13 @@ func (c *MCSClient) recvData(s []byte) {
 		glog.Error("mcs receive data for an unconnected layer")
 		return
 	}
+	left, err := core.ReadBytes(int(size), r)
+	if err != nil {
+		c.Emit("error", errors.New(fmt.Sprintf("mcs recvData get data error %v", err)))
+		return
+	}
 	glog.Debug("mcs emit channel", channelName)
-	c.Emit(channelName, s)
+	c.Emit(channelName, left)
 }
 
 func (c *MCSClient) recvChannelJoinConfirm(s []byte) {
