@@ -495,7 +495,6 @@ func (c *MCSClient) recvChannelJoinConfirm(s []byte) {
 }
 
 func (c *MCSClient) Write(data []byte) (n int, err error) {
-	// 64000303eb70810e40000000
 	buff := &bytes.Buffer{}
 	writeMCSPDUHeader(c.sendOpCode, 0, buff)
 	per.WriteInteger16(c.userId+MCS_USERCHANNEL_BASE, buff)

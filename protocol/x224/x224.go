@@ -57,7 +57,6 @@ const (
  * @see response -> http://msdn.microsoft.com/en-us/library/cc240506.aspx
  * @see failure ->http://msdn.microsoft.com/en-us/library/cc240507.aspx
  */
-
 type Negotiation struct {
 	Type   NegotiationType
 	Flag   uint8
@@ -143,7 +142,6 @@ type ServerConnectionConfirm struct {
 }
 
 func ReadServerConnectionConfirm(r io.Reader) (*ServerConnectionConfirm, error) {
-	// 14 208 0 0 18 52 0 3 0 8 0 5 0 0 0
 	s := &ServerConnectionConfirm{}
 	var err error
 	s.Len, err = core.ReadUInt8(r) // 14
@@ -241,8 +239,6 @@ func (x *X224) Connect() error {
 	message.ProtocolNeg.Result = uint32(x.requestedProtocol)
 
 	glog.Debug("x224 sendConnectionRequest", hex.EncodeToString(message.Serialize()))
-	// rdpy: 0ee000000000000100080001000000
-	// grdp: 10e000000000000d0a0100080001000000
 	_, err := x.transport.Write(message.Serialize())
 	x.transport.Once("data", x.recvConnectionConfirm)
 	return err
