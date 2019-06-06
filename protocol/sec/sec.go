@@ -10,6 +10,7 @@ import (
 	"github.com/icodeface/grdp/protocol/lic"
 	"github.com/icodeface/grdp/protocol/t125"
 	"github.com/icodeface/grdp/protocol/t125/gcc"
+	"github.com/lunixbochs/struc"
 	"io"
 	"unicode/utf16"
 )
@@ -76,84 +77,71 @@ const (
 )
 
 type RDPExtendedInfo struct {
-	clientAddressFamily uint16
-	cbClientAddress     uint16
-	clientAddress       []byte
-	cbClientDir         uint16
-	clientDir           []byte
-	clientTimeZone      []byte
-	clientSessionId     uint32
-	performanceFlags    uint32
+	ClientAddressFamily uint16 `struc:"little"`
+	CbClientAddress     uint16 `struc:"little,sizeof=ClientAddress"`
+	ClientAddress       []byte `struc:"[]byte"`
+	CbClientDir         uint16 `struc:"little,sizeof=ClientDir"`
+	ClientDir           []byte `struc:"[]byte"`
+	ClientTimeZone      []byte `struc:"[172]byte"`
+	ClientSessionId     uint32 `struc:"litttle"`
+	PerformanceFlags    uint32 `struc:"little"`
 }
 
 func NewExtendedInfo() *RDPExtendedInfo {
 	return &RDPExtendedInfo{
-		clientAddress:  []byte{0, 0},
-		clientDir:      []byte{0, 0},
-		clientTimeZone: make([]byte, 172),
+		ClientAddressFamily: AF_INET,
+		ClientAddress:       []byte{0, 0},
+		ClientDir:           []byte{0, 0},
+		ClientTimeZone:      make([]byte, 172),
 	}
 }
 
-func (ext *RDPExtendedInfo) Serialize() []byte {
-	buff := &bytes.Buffer{}
-	core.WriteUInt16LE(AF_INET, buff)                        // 0200
-	core.WriteUInt16LE(uint16(len(ext.clientAddress)), buff) // 0200
-	core.WriteBytes(ext.clientAddress, buff)                 // 0000
-	core.WriteUInt16LE(uint16(len(ext.clientDir)), buff)     // 0200
-	core.WriteBytes(ext.clientDir, buff)                     // 0000
-	core.WriteBytes(ext.clientTimeZone, buff)
-	core.WriteUInt32LE(ext.clientSessionId, buff)  // 00000000
-	core.WriteUInt32LE(ext.performanceFlags, buff) // 00000000
-	return buff.Bytes()
-}
-
 type RDPInfo struct {
-	codePage         uint32
-	flag             uint32
-	cbDomain         uint16
-	cbUserName       uint16
-	cbPassword       uint16
-	cbAlternateShell uint16
-	cbWorkingDir     uint16
-	domain           []byte
-	userName         []byte
-	password         []byte
-	alternateShell   []byte
-	workingDir       []byte
-	extendedInfo     *RDPExtendedInfo
+	CodePage         uint32
+	Flag             uint32
+	CbDomain         uint16
+	CbUserName       uint16
+	CbPassword       uint16
+	CbAlternateShell uint16
+	CbWorkingDir     uint16
+	Domain           []byte
+	UserName         []byte
+	Password         []byte
+	AlternateShell   []byte
+	WorkingDir       []byte
+	ExtendedInfo     *RDPExtendedInfo
 }
 
 func NewRDPInfo() *RDPInfo {
 	info := &RDPInfo{
-		domain:         []byte{0, 0},
-		userName:       []byte{0, 0},
-		password:       []byte{0, 0},
-		alternateShell: []byte{0, 0},
-		workingDir:     []byte{0, 0},
-		extendedInfo:   NewExtendedInfo(),
+		Flag:           INFO_MOUSE | INFO_UNICODE | INFO_LOGONNOTIFY | INFO_LOGONERRORS | INFO_DISABLECTRLALTDEL | INFO_ENABLEWINDOWSKEY,
+		Domain:         []byte{0, 0},
+		UserName:       []byte{0, 0},
+		Password:       []byte{0, 0},
+		AlternateShell: []byte{0, 0},
+		WorkingDir:     []byte{0, 0},
+		ExtendedInfo:   NewExtendedInfo(),
 	}
 	return info
 }
 
 func (o *RDPInfo) Serialize(hasExtended bool) []byte {
 	buff := &bytes.Buffer{}
-	core.WriteUInt32LE(o.codePage, buff) // 0000000
-	// 0530101
-	core.WriteUInt32LE(INFO_MOUSE|INFO_UNICODE|INFO_LOGONNOTIFY|INFO_LOGONERRORS|INFO_DISABLECTRLALTDEL|INFO_ENABLEWINDOWSKEY, buff)
-	core.WriteUInt16LE(uint16(len(o.domain)-2), buff)         // 001c
-	core.WriteUInt16LE(uint16(len(o.userName)-2), buff)       // 0008
-	core.WriteUInt16LE(uint16(len(o.password)-2), buff)       //000c
-	core.WriteUInt16LE(uint16(len(o.alternateShell)-2), buff) //0000
-	core.WriteUInt16LE(uint16(len(o.workingDir)-2), buff)     //0000
-	core.WriteBytes(o.domain, buff)
-	core.WriteBytes(o.userName, buff)
-	core.WriteBytes(o.password, buff)
-	core.WriteBytes(o.alternateShell, buff)
-	core.WriteBytes(o.workingDir, buff)
+	core.WriteUInt32LE(o.CodePage, buff)                      // 0000000
+	core.WriteUInt32LE(o.Flag, buff)                          // 0530101
+	core.WriteUInt16LE(uint16(len(o.Domain)-2), buff)         // 001c
+	core.WriteUInt16LE(uint16(len(o.UserName)-2), buff)       // 0008
+	core.WriteUInt16LE(uint16(len(o.Password)-2), buff)       //000c
+	core.WriteUInt16LE(uint16(len(o.AlternateShell)-2), buff) //0000
+	core.WriteUInt16LE(uint16(len(o.WorkingDir)-2), buff)     //0000
+	core.WriteBytes(o.Domain, buff)
+	core.WriteBytes(o.UserName, buff)
+	core.WriteBytes(o.Password, buff)
+	core.WriteBytes(o.AlternateShell, buff)
+	core.WriteBytes(o.WorkingDir, buff)
 	if hasExtended {
-		core.WriteBytes(o.extendedInfo.Serialize(), buff)
+		struc.Pack(buff, o.ExtendedInfo)
 	}
-
 	return buff.Bytes()
 }
 
@@ -236,7 +224,7 @@ func (c *Client) SetUser(user string) {
 		core.WriteUInt16LE(ch, buff)
 	}
 	core.WriteUInt16LE(0, buff)
-	c.info.userName = buff.Bytes()
+	c.info.UserName = buff.Bytes()
 }
 
 func (c *Client) SetPwd(pwd string) {
@@ -245,7 +233,7 @@ func (c *Client) SetPwd(pwd string) {
 		core.WriteUInt16LE(ch, buff)
 	}
 	core.WriteUInt16LE(0, buff)
-	c.info.password = buff.Bytes()
+	c.info.Password = buff.Bytes()
 }
 
 func (c *Client) SetDomain(domain string) {
@@ -254,7 +242,7 @@ func (c *Client) SetDomain(domain string) {
 		core.WriteUInt16LE(ch, buff)
 	}
 	core.WriteUInt16LE(0, buff)
-	c.info.domain = buff.Bytes()
+	c.info.Domain = buff.Bytes()
 }
 
 func (c *Client) connect(clientData []interface{}, serverData []interface{}, userId uint16, channels []t125.MCSChannelInfo) {

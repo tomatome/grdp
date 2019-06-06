@@ -45,7 +45,7 @@ const (
 )
 
 /**
- * Format MCS PDU header packet
+ * Format MCS PDULayer header packet
  * @param mcsPdu {integer}
  * @param options {integer}
  * @returns {type.UInt8} headers
@@ -59,14 +59,14 @@ func readMCSPDUHeader(options uint8, mcsPdu MCSDomainPDU) bool {
 }
 
 type DomainParameters struct {
-	MaxChannelIds   int `asn1: "tag:2"`
-	MaxUserIds      int `asn1: "tag:2"`
-	MaxTokenIds     int `asn1: "tag:2"`
-	NumPriorities   int `asn1: "tag:2"`
-	MinThoughput    int `asn1: "tag:2"`
-	MaxHeight       int `asn1: "tag:2"`
-	MaxMCSPDUsize   int `asn1: "tag:2"`
-	ProtocolVersion int `asn1: "tag:2"`
+	MaxChannelIds   int
+	MaxUserIds      int
+	MaxTokenIds     int
+	NumPriorities   int
+	MinThoughput    int
+	MaxHeight       int
+	MaxMCSPDUsize   int
+	ProtocolVersion int
 }
 
 /**
@@ -123,13 +123,13 @@ func ReadDomainParameters(r io.Reader) (*DomainParameters, error) {
  * @returns {asn1.univ.Sequence}
  */
 type ConnectInitial struct {
-	CallingDomainSelector []byte `asn1: "tag:4"`
-	CalledDomainSelector  []byte `asn1: "tag:4"`
+	CallingDomainSelector []byte
+	CalledDomainSelector  []byte
 	UpwardFlag            bool
 	TargetParameters      DomainParameters
 	MinimumParameters     DomainParameters
 	MaximumParameters     DomainParameters
-	UserData              []byte `asn1: "application, tag:101"`
+	UserData              []byte
 }
 
 func NewConnectInitial(userData []byte) ConnectInitial {
@@ -160,10 +160,10 @@ func (c *ConnectInitial) BER() []byte {
  */
 
 type ConnectResponse struct {
-	result           uint8 `asn1: "tag:10"`
+	result           uint8
 	calledConnectId  int
 	domainParameters *DomainParameters
-	userData         []byte `asn1: "tag:10"`
+	userData         []byte
 }
 
 func NewConnectResponse(userData []byte) *ConnectResponse {

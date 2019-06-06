@@ -8,6 +8,7 @@ import (
 	"github.com/icodeface/grdp/emission"
 	"github.com/icodeface/grdp/glog"
 	"github.com/icodeface/grdp/protocol/tpkt"
+	"github.com/lunixbochs/struc"
 	"io"
 )
 
@@ -58,23 +59,14 @@ const (
  * @see failure ->http://msdn.microsoft.com/en-us/library/cc240507.aspx
  */
 type Negotiation struct {
-	Type   NegotiationType
-	Flag   uint8
-	Length uint16
-	Result uint32
+	Type   NegotiationType `struc:"byte"`
+	Flag   uint8           `struc:"uint8"`
+	Length uint16          `struc:"little"`
+	Result uint32          `struc:"little"`
 }
 
 func NewNegotiation() *Negotiation {
 	return &Negotiation{0, 0, 0x0008 /*constant*/, uint32(PROTOCOL_RDP)}
-}
-
-func (x *Negotiation) Serialize() []byte {
-	buff := &bytes.Buffer{}
-	core.WriteByte(byte(x.Type), buff) // 1
-	core.WriteUInt8(x.Flag, buff)      // 0
-	core.WriteUInt16LE(x.Length, buff) // 8 0
-	core.WriteUInt32LE(x.Result, buff) // 1 0 0 0 vs 3 0 0 0
-	return buff.Bytes()
 }
 
 func ReadNegotiation(r io.Reader) (*Negotiation, error) {
@@ -102,12 +94,12 @@ type ClientConnectionRequestPDU struct {
 	Padding2    uint16
 	Padding3    uint8
 	Cookie      []byte
-	ProtocolNeg Negotiation
+	ProtocolNeg *Negotiation
 }
 
 func NewClientConnectionRequestPDU(coockie []byte) *ClientConnectionRequestPDU {
 	x := ClientConnectionRequestPDU{0, TPDU_CONNECTION_REQUEST, 0, 0, 0,
-		coockie, *NewNegotiation()}
+		coockie, NewNegotiation()}
 	x.Len = uint8(len(x.Serialize()) - 1)
 	return &x
 }
@@ -119,11 +111,12 @@ func (x *ClientConnectionRequestPDU) Serialize() []byte {
 	core.WriteUInt16BE(x.Padding1, buff)
 	core.WriteUInt16BE(x.Padding2, buff)
 	core.WriteUInt8(x.Padding3, buff)
+
 	buff.Write(x.Cookie)
 	if x.Len > 14 {
 		core.WriteUInt16LE(0x0A0D, buff)
 	}
-	buff.Write(x.ProtocolNeg.Serialize())
+	struc.Pack(buff, x.ProtocolNeg)
 	return buff.Bytes()
 }
 
@@ -176,14 +169,6 @@ func NewDataHeader() *DataHeader {
 	return &DataHeader{2, TPDU_DATA /* constant */, 0x80 /*constant*/}
 }
 
-func (h *DataHeader) Serialize() []byte {
-	buff := &bytes.Buffer{}
-	core.WriteUInt8(h.Header, buff)
-	core.WriteByte(byte(h.MessageType), buff)
-	core.WriteUInt8(h.Separator, buff)
-	return buff.Bytes()
-}
-
 /**
  * Common X224 Automata
  * @param presentation {Layer} presentation layer
@@ -219,8 +204,11 @@ func (x *X224) Read(b []byte) (n int, err error) {
 }
 
 func (x *X224) Write(b []byte) (n int, err error) {
-	buff := bytes.Buffer{}
-	buff.Write(x.dataHeader.Serialize())
+	buff := &bytes.Buffer{}
+	err = struc.Pack(buff, x.dataHeader)
+	if err != nil {
+		return 0, err
+	}
 	buff.Write(b)
 	glog.Debug("x224 write", hex.EncodeToString(buff.Bytes()))
 	return x.transport.Write(buff.Bytes())
