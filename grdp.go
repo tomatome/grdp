@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-type GrdpClient struct {
+type Client struct {
 	Host string // ip:port
 	tpkt *tpkt.TPKT
 	x224 *x224.X224
@@ -27,16 +27,16 @@ type GrdpClient struct {
 	pdu  *pdu.Client
 }
 
-func NewClient(host string, logLevel glog.LEVEL) *GrdpClient {
+func NewClient(host string, logLevel glog.LEVEL) *Client {
 	glog.SetLevel(logLevel)
 	logger := log.New(os.Stdout, "", 0)
 	glog.SetLogger(logger)
-	return &GrdpClient{
+	return &Client{
 		Host: host,
 	}
 }
 
-func (g *GrdpClient) Login(user, pwd string) error {
+func (g *Client) Login(user, pwd string) error {
 	conn, err := net.DialTimeout("tcp", g.Host, 3*time.Second)
 	if err != nil {
 		return errors.New(fmt.Sprintf("[dial err] %v", err))
