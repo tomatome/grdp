@@ -9,7 +9,6 @@ import (
 	"github.com/icodeface/grdp/glog"
 	"github.com/icodeface/grdp/protocol/tpkt"
 	"github.com/lunixbochs/struc"
-	"io"
 )
 
 // take idea from https://github.com/Madnikulin50/gordp
@@ -69,19 +68,6 @@ func NewNegotiation() *Negotiation {
 	return &Negotiation{0, 0, 0x0008 /*constant*/, uint32(PROTOCOL_RDP)}
 }
 
-func ReadNegotiation(r io.Reader) (*Negotiation, error) {
-	n := &Negotiation{}
-	b, err := core.ReadByte(r) // 3 TYPE_RDP_NEG_FAILURE
-	if err != nil {
-		return nil, err
-	}
-	n.Type = NegotiationType(b)
-	n.Flag, err = core.ReadUInt8(r)      // 0
-	n.Length, err = core.ReadUint16LE(r) // 8
-	n.Result, err = core.ReadUInt32LE(r) // 0 5
-	return n, nil
-}
-
 /**
  * X224 client connection request
  * @param opt {object} component type options
@@ -131,28 +117,7 @@ type ServerConnectionConfirm struct {
 	Padding1    uint16
 	Padding2    uint16
 	Padding3    uint8
-	ProtocolNeg Negotiation
-}
-
-func ReadServerConnectionConfirm(r io.Reader) (*ServerConnectionConfirm, error) {
-	s := &ServerConnectionConfirm{}
-	var err error
-	s.Len, err = core.ReadUInt8(r) // 14
-
-	code, err := core.ReadUInt8(r) // 208 TPDU_CONNECTION_CONFIRM
-	s.Code = MessageType(code)
-
-	s.Padding1, err = core.ReadUint16LE(r) // 0 0
-	s.Padding2, err = core.ReadUint16LE(r) // 18 52
-	s.Padding3, err = core.ReadUInt8(r)    // 0
-
-	neo, err := ReadNegotiation(r)
-	if err != nil {
-		return nil, err
-	}
-	s.ProtocolNeg = *neo
-
-	return s, err
+	ProtocolNeg *Negotiation
 }
 
 /**
@@ -234,9 +199,8 @@ func (x *X224) Connect() error {
 
 func (x *X224) recvConnectionConfirm(s []byte) {
 	glog.Debug("x224 recvConnectionConfirm", hex.EncodeToString(s))
-
-	message, err := ReadServerConnectionConfirm(bytes.NewReader(s))
-	if err != nil {
+	message := &ServerConnectionConfirm{}
+	if err := struc.Unpack(bytes.NewReader(s), message); err != nil {
 		glog.Error("ReadServerConnectionConfirm err", err)
 		return
 	}

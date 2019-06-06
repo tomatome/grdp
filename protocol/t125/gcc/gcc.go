@@ -5,6 +5,7 @@ import (
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/glog"
 	"github.com/icodeface/grdp/protocol/t125/per"
+	"github.com/lunixbochs/struc"
 )
 
 var t124_02_98_oid = []byte{0, 0, 20, 124, 0, 1}
@@ -218,28 +219,28 @@ type ChannelDef struct {
 }
 
 type ClientCoreData struct {
-	RdpVersion             VERSION
-	DesktopWidth           uint16
-	DesktopHeight          uint16
-	ColorDepth             ColorDepth
-	SasSequence            Sequence
-	KbdLayout              KeyboardLayout
-	ClientBuild            uint32
-	ClientName             [32]byte
-	KeyboardType           uint32
-	KeyboardSubType        uint32
-	KeyboardFnKeys         uint32
-	ImeFileName            [64]byte
-	PostBeta2ColorDepth    ColorDepth //optional
-	ClientProductId        uint16     //optional
-	SerialNumber           uint32     //optional
-	HighColorDepth         HighColor  //optional
-	SupportedColorDepths   uint16     //optional
-	EarlyCapabilityFlags   uint16     //optional
-	ClientDigProductId     [64]byte   //optional
-	ConnectionType         uint8      //optional
-	Pad1octet              uint8      //optional
-	ServerSelectedProtocol uint32     //optional
+	RdpVersion             VERSION        `struc:"uint32,little"`
+	DesktopWidth           uint16         `struc:"little"`
+	DesktopHeight          uint16         `struc:"little"`
+	ColorDepth             ColorDepth     `struc:"little"`
+	SasSequence            Sequence       `struc:"little"`
+	KbdLayout              KeyboardLayout `struc:"little"`
+	ClientBuild            uint32         `struc:"little"`
+	ClientName             [32]byte       `struc:"[32]byte"`
+	KeyboardType           uint32         `struc:"little"`
+	KeyboardSubType        uint32         `struc:"little"`
+	KeyboardFnKeys         uint32         `struc:"little"`
+	ImeFileName            [64]byte       `struc:"[64]byte"`
+	PostBeta2ColorDepth    ColorDepth     `struc:"little"`
+	ClientProductId        uint16         `struc:"little"`
+	SerialNumber           uint32         `struc:"little"`
+	HighColorDepth         HighColor      `struc:"little"`
+	SupportedColorDepths   uint16         `struc:"little"`
+	EarlyCapabilityFlags   uint16         `struc:"little"`
+	ClientDigProductId     [64]byte       `struc:"[64]byte"`
+	ConnectionType         uint8          `struc:"uint8"`
+	Pad1octet              uint8          `struc:"uint8"`
+	ServerSelectedProtocol uint32         `struc:"little"`
 }
 
 func NewClientCoreData() *ClientCoreData {
@@ -253,30 +254,9 @@ func NewClientCoreData() *ClientCoreData {
 
 func (data *ClientCoreData) Block() []byte {
 	buff := &bytes.Buffer{}
-	core.WriteUInt16LE(CS_CORE, buff)                  // 01C0
-	core.WriteUInt16LE(0xd8, buff)                     // d8
-	core.WriteUInt32LE(uint32(data.RdpVersion), buff)  // 00040008
-	core.WriteUInt16LE(data.DesktopWidth, buff)        // 0000
-	core.WriteUInt16LE(data.DesktopHeight, buff)       // 5200
-	core.WriteUInt16LE(uint16(data.ColorDepth), buff)  // 301c
-	core.WriteUInt16LE(uint16(data.SasSequence), buff) // a03a
-	core.WriteUInt32LE(uint32(data.KbdLayout), buff)   // a0904000
-	core.WriteUInt32LE(data.ClientBuild, buff)         // 0ce0e000
-	core.WriteBytes(data.ClientName[:], buff)          //
-	core.WriteUInt32LE(data.KeyboardType, buff)        //    00000004
-	core.WriteUInt32LE(data.KeyboardSubType, buff)     // 00000000
-	core.WriteUInt32LE(data.KeyboardFnKeys, buff)      //
-	core.WriteBytes(data.ImeFileName[:], buff)
-	core.WriteUInt16LE(uint16(data.PostBeta2ColorDepth), buff)
-	core.WriteUInt16LE(data.ClientProductId, buff)
-	core.WriteUInt32LE(data.SerialNumber, buff)
-	core.WriteUInt16LE(uint16(data.HighColorDepth), buff)
-	core.WriteUInt16LE(data.SupportedColorDepths, buff)
-	core.WriteUInt16LE(data.EarlyCapabilityFlags, buff)
-	core.WriteBytes(data.ClientDigProductId[:], buff)
-	core.WriteUInt8(data.ConnectionType, buff)
-	core.WriteUInt8(data.Pad1octet, buff)
-	core.WriteUInt32LE(data.ServerSelectedProtocol, buff)
+	core.WriteUInt16LE(CS_CORE, buff) // 01C0
+	core.WriteUInt16LE(0xd8, buff)    // d800
+	struc.Pack(buff, data)
 	return buff.Bytes()
 }
 
