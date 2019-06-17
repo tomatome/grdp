@@ -1,5 +1,7 @@
 package pdu
 
+import "github.com/icodeface/grdp/protocol/t125/gcc"
+
 type CapsType uint16
 
 const (
@@ -120,17 +122,16 @@ const (
 /**
  * @see http://msdn.microsoft.com/en-us/library/cc240563.aspx
  */
-type InputFlags uint16
 
 const (
-	INPUT_FLAG_SCANCODES       InputFlags = 0x0001
-	INPUT_FLAG_MOUSEX                     = 0x0004
-	INPUT_FLAG_FASTPATH_INPUT             = 0x0008
-	INPUT_FLAG_UNICODE                    = 0x0010
-	INPUT_FLAG_FASTPATH_INPUT2            = 0x0020
-	INPUT_FLAG_UNUSED1                    = 0x0040
-	INPUT_FLAG_UNUSED2                    = 0x0080
-	TS_INPUT_FLAG_MOUSE_HWHEEL            = 0x0100
+	INPUT_FLAG_SCANCODES       uint16 = 0x0001
+	INPUT_FLAG_MOUSEX                 = 0x0004
+	INPUT_FLAG_FASTPATH_INPUT         = 0x0008
+	INPUT_FLAG_UNICODE                = 0x0010
+	INPUT_FLAG_FASTPATH_INPUT2        = 0x0020
+	INPUT_FLAG_UNUSED1                = 0x0040
+	INPUT_FLAG_UNUSED2                = 0x0080
+	TS_INPUT_FLAG_MOUSE_HWHEEL        = 0x0100
 )
 
 /**
@@ -189,17 +190,17 @@ type Capability interface {
 }
 
 type GeneralCapability struct {
-	OSMajorType             uint16 `struc:"little"`
-	OSMinorType             uint16 `struc:"little"`
-	ProtocolVersion         uint16 `struc:"little"`
-	Pad2octetsA             uint16 `struc:"pad"`
-	GeneralCompressionTypes uint16 `struc:"little"`
-	ExtraFlags              uint16 `struc:"little"`
-	UpdateCapabilityFlag    uint16 `struc:"little"`
-	RemoteUnshareFlag       uint16 `struc:"little"`
-	GeneralCompressionLevel uint16 `struc:"little"`
-	RefreshRectSupport      uint8  `struc:"little"`
-	SuppressOutputSupport   uint8  `struc:"little"`
+	OSMajorType             MajorType `struc:"little"`
+	OSMinorType             MinorType `struc:"little"`
+	ProtocolVersion         uint16    `struc:"little"`
+	Pad2octetsA             uint16    `struc:"pad"`
+	GeneralCompressionTypes uint16    `struc:"little"`
+	ExtraFlags              uint16    `struc:"little"`
+	UpdateCapabilityFlag    uint16    `struc:"little"`
+	RemoteUnshareFlag       uint16    `struc:"little"`
+	GeneralCompressionLevel uint16    `struc:"little"`
+	RefreshRectSupport      uint8     `struc:"little"`
+	SuppressOutputSupport   uint8     `struc:"little"`
 }
 
 func (*GeneralCapability) Type() CapsType {
@@ -207,19 +208,19 @@ func (*GeneralCapability) Type() CapsType {
 }
 
 type BitmapCapability struct {
-	PreferredBitsPerPixel    uint16 `struc:"little"`
-	Receive1BitPerPixel      uint16 `struc:"little"`
-	Receive4BitsPerPixel     uint16 `struc:"little"`
-	Receive8BitsPerPixel     uint16 `struc:"little"`
-	DesktopWidth             uint16 `struc:"little"`
-	DesktopHeight            uint16 `struc:"little"`
-	Pad2octets               uint16 `struc:"pad"`
-	DesktopResizeFlag        uint16 `struc:"little"`
-	BitmapCompressionFlag    uint16 `struc:"little"`
-	HighColorFlags           uint8  `struc:"little"`
-	DrawingFlags             uint8  `struc:"little"`
-	MultipleRectangleSupport uint16 `struc:"little"`
-	Pad2octetsB              uint16 `struc:"pad"`
+	PreferredBitsPerPixel    gcc.HighColor `struc:"little"`
+	Receive1BitPerPixel      uint16        `struc:"little"`
+	Receive4BitsPerPixel     uint16        `struc:"little"`
+	Receive8BitsPerPixel     uint16        `struc:"little"`
+	DesktopWidth             uint16        `struc:"little"`
+	DesktopHeight            uint16        `struc:"little"`
+	Pad2octets               uint16        `struc:"pad"`
+	DesktopResizeFlag        uint16        `struc:"little"`
+	BitmapCompressionFlag    uint16        `struc:"little"`
+	HighColorFlags           uint8         `struc:"little"`
+	DrawingFlags             uint8         `struc:"little"`
+	MultipleRectangleSupport uint16        `struc:"little"`
+	Pad2octetsB              uint16        `struc:"pad"`
 }
 
 func (*BitmapCapability) Type() CapsType {
@@ -284,7 +285,7 @@ type InputCapability struct {
 	Flags       uint16 `struc:"little"`
 	Pad2octetsA uint16 `struc:"pad"`
 	// same value as gcc.ClientCoreSettings.kbdLayout
-	KeyboardLayout uint32 `struc:"little"`
+	KeyboardLayout gcc.KeyboardLayout `struc:"little"`
 	// same value as gcc.ClientCoreSettings.keyboardType
 	KeyboardType uint32 `struc:"little"`
 	// same value as gcc.ClientCoreSettings.keyboardSubType
@@ -374,8 +375,8 @@ func (*WindowActivationCapability) Type() CapsType {
 }
 
 type FontCapability struct {
-	Flags      uint16 `struc:"little"`
-	Pad2octets uint16 `struc:"pad"`
+	SupportFlags uint16 `struc:"little"`
+	Pad2octets   uint16 `struc:"pad"`
 }
 
 func (*FontCapability) Type() CapsType {
