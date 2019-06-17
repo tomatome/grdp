@@ -11,16 +11,57 @@ import (
 )
 
 const (
-	PDUTYPE_DEMANDACTIVEPDU  uint16 = 0x11
-	PDUTYPE_CONFIRMACTIVEPDU        = 0x13
-	PDUTYPE_DEACTIVATEALLPDU        = 0x16
-	PDUTYPE_DATAPDU                 = 0x17
-	PDUTYPE_SERVER_REDIR_PKT        = 0x1A
+	PDUTYPE_DEMANDACTIVEPDU  = 0x11
+	PDUTYPE_CONFIRMACTIVEPDU = 0x13
+	PDUTYPE_DEACTIVATEALLPDU = 0x16
+	PDUTYPE_DATAPDU          = 0x17
+	PDUTYPE_SERVER_REDIR_PKT = 0x1A
+)
+
+const (
+	PDUTYPE2_UPDATE                      = 0x02
+	PDUTYPE2_CONTROL                     = 0x14
+	PDUTYPE2_POINTER                     = 0x1B
+	PDUTYPE2_INPUT                       = 0x1C
+	PDUTYPE2_SYNCHRONIZE                 = 0x1F
+	PDUTYPE2_REFRESH_RECT                = 0x21
+	PDUTYPE2_PLAY_SOUND                  = 0x22
+	PDUTYPE2_SUPPRESS_OUTPUT             = 0x23
+	PDUTYPE2_SHUTDOWN_REQUEST            = 0x24
+	PDUTYPE2_SHUTDOWN_DENIED             = 0x25
+	PDUTYPE2_SAVE_SESSION_INFO           = 0x26
+	PDUTYPE2_FONTLIST                    = 0x27
+	PDUTYPE2_FONTMAP                     = 0x28
+	PDUTYPE2_SET_KEYBOARD_INDICATORS     = 0x29
+	PDUTYPE2_BITMAPCACHE_PERSISTENT_LIST = 0x2B
+	PDUTYPE2_BITMAPCACHE_ERROR_PDU       = 0x2C
+	PDUTYPE2_SET_KEYBOARD_IME_STATUS     = 0x2D
+	PDUTYPE2_OFFSCRCACHE_ERROR_PDU       = 0x2E
+	PDUTYPE2_SET_ERROR_INFO_PDU          = 0x2F
+	PDUTYPE2_DRAWNINEGRID_ERROR_PDU      = 0x30
+	PDUTYPE2_DRAWGDIPLUS_ERROR_PDU       = 0x31
+	PDUTYPE2_ARC_STATUS_PDU              = 0x32
+	PDUTYPE2_STATUS_INFO_PDU             = 0x36
+	PDUTYPE2_MONITOR_LAYOUT_PDU          = 0x37
+)
+
+const (
+	CTRLACTION_REQUEST_CONTROL = 0x0001
+	CTRLACTION_GRANTED_CONTROL = 0x0002
+	CTRLACTION_DETACH          = 0x0003
+	CTRLACTION_COOPERATE       = 0x0004
+)
+
+const (
+	STREAM_UNDEFINED = 0x00
+	STREAM_LOW       = 0x01
+	STREAM_MED       = 0x02
+	STREAM_HI        = 0x04
 )
 
 type ShareDataHeader struct {
 	SharedId           uint32 `struc:"little"`
-	Padding1           uint8  `struc:"little"`
+	Padding1           uint8  `struc:"pad"`
 	StreamId           uint8  `struc:"little"`
 	UncompressedLength uint16 `struc:"little"`
 	PDUType2           uint8  `struc:"little"`
@@ -32,6 +73,15 @@ type ShareControlHeader struct {
 	TotalLength uint16 `struc:"little"`
 	PDUType     uint16 `struc:"little"`
 	PDUSource   uint16 `struc:"little"`
+}
+
+func NewShareDataHeader(size int, type2 uint8, shareId uint32) *ShareDataHeader {
+	return &ShareDataHeader{
+		SharedId:           shareId,
+		PDUType2:           type2,
+		StreamId:           STREAM_LOW,
+		UncompressedLength: uint16(size - 8),
+	}
 }
 
 type PDUMessage interface {
@@ -221,6 +271,71 @@ func NewConfirmActivePDU() *ConfirmActivePDU {
 		OriginatorId:   0x03EA,
 		CapabilitySets: make([]Capability, 0),
 	}
+}
+
+type DataPDU struct {
+	Header *ShareDataHeader
+	Data   DataPDUData
+}
+
+func (*DataPDU) Type() uint16 {
+	return PDUTYPE_DATAPDU
+}
+
+func (d *DataPDU) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	struc.Pack(buff, d)
+	return buff.Bytes()
+}
+
+func NewDataPDU(data DataPDUData, shareId uint32) *DataPDU {
+	dataBuff := &bytes.Buffer{}
+	struc.Pack(dataBuff, data)
+	return &DataPDU{
+		Header: NewShareDataHeader(len(dataBuff.Bytes()), data.Type2(), shareId),
+		Data:   data,
+	}
+}
+
+type DataPDUData interface {
+	Type2() uint8
+}
+
+type SynchronizeDataPDU struct {
+	MessageType uint16 `struc:"little"`
+	TargetUser  uint16 `struc:"little"`
+}
+
+func (*SynchronizeDataPDU) Type2() uint8 {
+	return PDUTYPE2_SYNCHRONIZE
+}
+
+func NewSynchronizeDataPDU(targetUser uint16) *SynchronizeDataPDU {
+	return &SynchronizeDataPDU{
+		MessageType: 1,
+		TargetUser:  targetUser,
+	}
+}
+
+type ControlDataPDU struct {
+	Action    uint16 `struc:"little"`
+	GrantId   uint16 `struc:"little"`
+	ControlId uint32 `struc:"little"`
+}
+
+func (*ControlDataPDU) Type2() uint8 {
+	return PDUTYPE2_CONTROL
+}
+
+type FontListDataPDU struct {
+	NumberFonts   uint16 `struc:"little"`
+	TotalNumFonts uint16 `struc:"little"`
+	ListFlags     uint16 `struc:"little"`
+	EntrySize     uint16 `struc:"little"`
+}
+
+func (*FontListDataPDU) Type2() uint8 {
+	return PDUTYPE2_FONTLIST
 }
 
 type PDU struct {

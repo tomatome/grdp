@@ -207,7 +207,8 @@ func (s *SEC) sendFlagged(flag uint16, data []byte) {
 
 type Client struct {
 	*SEC
-	userId uint16
+	userId    uint16
+	channelId uint16
 }
 
 func NewClient(t core.Transport) *Client {
@@ -250,6 +251,12 @@ func (c *Client) connect(clientData []interface{}, serverData []interface{}, use
 	c.clientData = clientData
 	c.serverData = serverData
 	c.userId = userId
+	for _, channel := range channels {
+		if channel.Name == "global" {
+			c.channelId = channel.ID
+			break
+		}
+	}
 	c.sendInfoPkt()
 	c.transport.Once("global", c.recvLicenceInfo)
 }
@@ -294,7 +301,7 @@ func (c *Client) recvLicenceInfo(s []byte) {
 
 connect:
 	c.transport.Once("global", c.recvData)
-	c.Emit("connect", c.clientData[0].(*gcc.ClientCoreData), c.userId)
+	c.Emit("connect", c.clientData[0].(*gcc.ClientCoreData), c.userId, c.channelId)
 	return
 
 retry:

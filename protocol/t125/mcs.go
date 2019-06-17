@@ -199,8 +199,8 @@ func ReadConnectResponse(r io.Reader) (*ConnectResponse, error) {
 }
 
 type MCSChannelInfo struct {
-	id   uint16
-	name string
+	ID   uint16
+	Name string
 }
 
 type MCS struct {
@@ -399,7 +399,7 @@ func (c *MCSClient) connectChannels() {
 	}
 
 	// sendChannelJoinRequest
-	c.sendChannelJoinRequest(c.channels[c.channelsConnected].id)
+	c.sendChannelJoinRequest(c.channels[c.channelsConnected].ID)
 	c.channelsConnected += 1
 	c.transport.Once("data", c.recvChannelJoinConfirm)
 }
@@ -440,13 +440,13 @@ func (c *MCSClient) recvData(s []byte) {
 	per.ReadEnumerates(r)
 	size, _ := per.ReadLength(r)
 
-	// channel id doesn't match a requested layer
+	// channel ID doesn't match a requested layer
 	found := false
 	channelName := ""
 	for _, channel := range c.channels {
-		if channel.id == channelId {
+		if channel.ID == channelId {
 			found = true
-			channelName = channel.name
+			channelName = channel.Name
 			break
 		}
 	}
@@ -498,7 +498,7 @@ func (c *MCSClient) Write(data []byte) (n int, err error) {
 	buff := &bytes.Buffer{}
 	writeMCSPDUHeader(c.sendOpCode, 0, buff)
 	per.WriteInteger16(c.userId+MCS_USERCHANNEL_BASE, buff)
-	per.WriteInteger16(c.channels[0].id, buff)
+	per.WriteInteger16(c.channels[0].ID, buff)
 	core.WriteUInt8(0x70, buff)
 	per.WriteLength(len(data), buff)
 	core.WriteBytes(data, buff)

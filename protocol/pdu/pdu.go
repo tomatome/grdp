@@ -14,6 +14,7 @@ type PDULayer struct {
 	transport          core.Transport
 	sharedId           uint32
 	userId             uint16
+	channelId          uint16
 	serverCapabilities map[CapsType]Capability
 	clientCapabilities map[CapsType]Capability
 }
@@ -91,6 +92,11 @@ func (p *PDULayer) sendPDU(message PDUMessage) {
 	p.transport.Write(pdu.serialize())
 }
 
+func (p *PDULayer) sendDataPDU(message DataPDUData) {
+	dataPdu := NewDataPDU(message, p.sharedId)
+	p.sendPDU(dataPdu)
+}
+
 type Client struct {
 	*PDULayer
 	clientCoreData *gcc.ClientCoreData
@@ -104,10 +110,11 @@ func NewClient(t core.Transport) *Client {
 	return c
 }
 
-func (c *Client) connect(data *gcc.ClientCoreData, userId uint16) {
+func (c *Client) connect(data *gcc.ClientCoreData, userId uint16, channelId uint16) {
 	glog.Debug("pdu connect")
 	c.clientCoreData = data
 	c.userId = userId
+	c.channelId = channelId
 	c.transport.Once("data", c.recvDemandActivePDU)
 }
 
@@ -165,12 +172,15 @@ func (c *Client) sendConfirmActivePDU() {
 		pdu.CapabilitySets = append(pdu.CapabilitySets, v)
 	}
 	c.sendPDU(pdu)
-	glog.Debug("PDU sendConfirmActivePDU")
+	glog.Debug("PDU sendConfirmActivePDU finished")
 }
 
 func (c *Client) sendClientFinalizeSynchronizePDU() {
-	glog.Debug("tofo PDU sendClientFinalizeSynchronizePDU")
-	// todo
+	c.sendDataPDU(NewSynchronizeDataPDU(c.channelId))
+	c.sendDataPDU(&ControlDataPDU{Action: CTRLACTION_COOPERATE})
+	c.sendDataPDU(&ControlDataPDU{Action: CTRLACTION_REQUEST_CONTROL})
+	c.sendDataPDU(&FontListDataPDU{ListFlags: 0x0003, EntrySize: 0x0032})
+	glog.Debug("PDU sendClientFinalizeSynchronizePDU finished")
 }
 
 func (c *Client) recvServerSynchronizePDU(s []byte) {
