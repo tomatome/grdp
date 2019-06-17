@@ -62,10 +62,15 @@ func (d *DemandActivePDU) Serialize() []byte {
 	core.WriteUInt16LE(d.LengthSourceDescriptor, buff)
 	core.WriteUInt16LE(d.LengthCombinedCapabilities, buff)
 	core.WriteBytes([]byte(d.SourceDescriptor), buff)
-	core.WriteUInt16LE(d.NumberCapabilities, buff)
+	core.WriteUInt16LE(uint16(len(d.CapabilitySets)), buff)
 	core.WriteUInt16LE(d.Pad2Octets, buff)
 	for _, cap := range d.CapabilitySets {
-		core.WriteBytes(cap.Serialize(), buff)
+		core.WriteUInt16LE(uint16(cap.Type()), buff)
+		capBuff := &bytes.Buffer{}
+		struc.Pack(capBuff, cap)
+		capBytes := capBuff.Bytes()
+		core.WriteUInt16LE(uint16(len(capBytes)+4), buff)
+		core.WriteBytes(capBytes, buff)
 	}
 	core.WriteUInt32LE(d.SessionId, buff)
 	return buff.Bytes()
@@ -87,6 +92,8 @@ func readDemandActivePDU(r io.Reader) (*DemandActivePDU, error) {
 	d.SourceDescriptor = string(sourceDescriptorBytes)
 	d.NumberCapabilities, err = core.ReadUint16LE(r)
 	d.Pad2Octets, err = core.ReadUint16LE(r)
+	d.CapabilitySets = make([]Capability, 0)
+	glog.Debug("NumberCapabilities is", d.NumberCapabilities)
 	for i := 0; i < int(d.NumberCapabilities); i++ {
 		capType, err := core.ReadUint16LE(r)
 		if err != nil {
@@ -96,10 +103,75 @@ func readDemandActivePDU(r io.Reader) (*DemandActivePDU, error) {
 		if err != nil {
 			return nil, err
 		}
-		core.ReadBytes(int(capLen)-4, r)
-		fmt.Println("cap type is", capType, "len is", capLen)
+		capBytes, err := core.ReadBytes(int(capLen)-4, r)
+		if err != nil {
+			return nil, err
+		}
+		capReader := bytes.NewReader(capBytes)
+
+		var c Capability
 		switch CapsType(capType) {
-		// todo
+		case CAPSTYPE_GENERAL:
+			c = &GeneralCapability{}
+		case CAPSTYPE_BITMAP:
+			c = &BitmapCapability{}
+		case CAPSTYPE_ORDER:
+			c = &OrderCapability{}
+		case CAPSTYPE_BITMAPCACHE:
+			c = &BitmapCacheCapability{}
+		case CAPSTYPE_POINTER:
+			c = &PointerCapability{}
+		case CAPSTYPE_INPUT:
+			c = &InputCapability{}
+		case CAPSTYPE_BRUSH:
+			c = &BrushCapability{}
+		case CAPSTYPE_GLYPHCACHE:
+			c = &GlyphCapability{}
+		case CAPSTYPE_OFFSCREENCACHE:
+			c = &OffscreenBitmapCacheCapability{}
+		case CAPSTYPE_VIRTUALCHANNEL:
+			c = &VirtualChannelCapability{}
+		case CAPSTYPE_SOUND:
+			c = &SoundCapability{}
+		case CAPSTYPE_CONTROL:
+			c = &ControlCapability{}
+		case CAPSTYPE_ACTIVATION:
+			c = &WindowActivationCapability{}
+		case CAPSTYPE_FONT:
+			c = &FontCapability{}
+		case CAPSTYPE_COLORCACHE:
+			c = &ColorCacheCapability{}
+		case CAPSTYPE_SHARE:
+			c = &ShareCapability{}
+		case CAPSETTYPE_MULTIFRAGMENTUPDATE:
+			c = &MultiFragmentUpdate{}
+		case CAPSTYPE_DRAWGDIPLUS:
+			c = &DrawGDIPlusCapability{}
+		case CAPSETTYPE_BITMAP_CODECS:
+			c = &BitmapCodecsCapability{}
+		case CAPSTYPE_BITMAPCACHE_HOSTSUPPORT:
+			c = &BitmapCacheHostSupportCapability{}
+		case CAPSETTYPE_LARGE_POINTER:
+			c = &LargePointerCapability{}
+		case CAPSTYPE_RAIL:
+			c = &RemoteProgramsCapability{}
+		case CAPSTYPE_WINDOW:
+			c = &WindowListCapability{}
+		case CAPSETTYPE_COMPDESK:
+			c = &DesktopCompositionCapability{}
+		case CAPSETTYPE_SURFACE_COMMANDS:
+			c = &SurfaceCommandsCapability{}
+		default:
+			glog.Error("unknown Capability type", fmt.Sprintf("0x%04x", capType))
+			c = nil
+		}
+
+		if c != nil {
+			if err := struc.Unpack(capReader, c); err != nil {
+				glog.Error("Capability unpack error", err, fmt.Sprintf("0x%04x", capType), hex.EncodeToString(capBytes))
+				return nil, err
+			}
+			d.CapabilitySets = append(d.CapabilitySets, c)
 		}
 	}
 	d.SessionId, err = core.ReadUInt32LE(r)
@@ -116,7 +188,7 @@ type ConfirmActivePDU struct {
 	LengthCombinedCapabilities uint16       `struc:"little"`
 	SourceDescriptor           string       `struc:"sizefrom=LengthSourceDescriptor"`
 	NumberCapabilities         uint16       `struc:"little,sizeof=CapabilitySets"`
-	Pad2Octets                 uint16       `struc:"little"`
+	Pad2Octets                 uint16       `struc:"pad"`
 	CapabilitySets             []Capability `struc:"sizefrom=NumberCapabilities"`
 }
 
@@ -230,7 +302,6 @@ func (c *Client) recvDemandActivePDU(s []byte) {
 	}
 	c.sharedId = pdu.Message.(*DemandActivePDU).SharedId
 
-	fmt.Println("CapabilitySets:", pdu.Message.(*DemandActivePDU).CapabilitySets)
 	for _, caps := range pdu.Message.(*DemandActivePDU).CapabilitySets {
 		c.serverCapabilities[caps.Type()] = caps
 	}
