@@ -300,7 +300,7 @@ func (c *Client) recvLicenceInfo(s []byte) {
 	}
 
 connect:
-	c.transport.Once("global", c.recvData)
+	c.transport.On("global", c.recvData)
 	c.Emit("connect", c.clientData[0].(*gcc.ClientCoreData), c.userId, c.channelId)
 	return
 

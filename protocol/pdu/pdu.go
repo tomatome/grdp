@@ -143,6 +143,7 @@ func (c *Client) recvDemandActivePDU(s []byte) {
 }
 
 func (c *Client) sendConfirmActivePDU() {
+	glog.Debug("PDU start sendConfirmActivePDU")
 	generalCapa := c.clientCapabilities[CAPSTYPE_GENERAL].(*GeneralCapability)
 	generalCapa.OSMajorType = OSMAJORTYPE_WINDOWS
 	generalCapa.OSMinorType = OSMINORTYPE_WINDOWS_NT
@@ -172,19 +173,18 @@ func (c *Client) sendConfirmActivePDU() {
 		pdu.CapabilitySets = append(pdu.CapabilitySets, v)
 	}
 	c.sendPDU(pdu)
-	glog.Debug("PDU sendConfirmActivePDU finished")
 }
 
 func (c *Client) sendClientFinalizeSynchronizePDU() {
+	glog.Debug("PDU start sendClientFinalizeSynchronizePDU")
 	c.sendDataPDU(NewSynchronizeDataPDU(c.channelId))
 	c.sendDataPDU(&ControlDataPDU{Action: CTRLACTION_COOPERATE})
 	c.sendDataPDU(&ControlDataPDU{Action: CTRLACTION_REQUEST_CONTROL})
 	c.sendDataPDU(&FontListDataPDU{ListFlags: 0x0003, EntrySize: 0x0032})
-	glog.Debug("PDU sendClientFinalizeSynchronizePDU finished")
 }
 
 func (c *Client) recvServerSynchronizePDU(s []byte) {
-	glog.Debug("tofo PDU recvServerSynchronizePDU")
+	glog.Debug("todo PDU recvServerSynchronizePDU", hex.EncodeToString(s))
 	// todo
 }
 
