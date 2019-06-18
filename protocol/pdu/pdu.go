@@ -184,11 +184,28 @@ func (c *Client) sendClientFinalizeSynchronizePDU() {
 }
 
 func (c *Client) recvServerSynchronizePDU(s []byte) {
-	glog.Debug("todo PDU recvServerSynchronizePDU", hex.EncodeToString(s))
-	// todo
+	glog.Debug("PDU recvServerSynchronizePDU")
+	r := bytes.NewReader(s)
+	pdu, err := readPDU(r)
+	if err != nil {
+		glog.Error(err)
+		return
+	}
+	dataPdu, ok := pdu.Message.(*DataPDU)
+	if !ok || dataPdu.Header.PDUType2 != PDUTYPE2_SYNCHRONIZE {
+		if ok {
+			glog.Info("recvServerSynchronizePDU ignore datapdu type2", dataPdu.Header.PDUType2)
+		} else {
+			glog.Info("recvServerSynchronizePDU ignore message type", pdu.ShareCtrlHeader.PDUType)
+		}
+		c.transport.Once("data", c.recvServerSynchronizePDU)
+		return
+	}
+	c.transport.Once("data", c.recvServerControlCooperatePDU)
 }
 
-func (c *Client) recvServerControlCooperatePDU() {
+func (c *Client) recvServerControlCooperatePDU(s []byte) {
+	glog.Debug("PDU recvServerControlCooperatePDU")
 	// todo
 }
 

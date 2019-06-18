@@ -3,6 +3,7 @@ package pdu
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/glog"
@@ -273,6 +274,34 @@ func NewConfirmActivePDU() *ConfirmActivePDU {
 	}
 }
 
+func readConfirmActivePDU(r io.Reader) (*ConfirmActivePDU, error) {
+	// todo
+	p := &ConfirmActivePDU{}
+	return p, nil
+}
+
+type DeactiveAllPDU struct {
+	ShareId                uint32 `struc:"little"`
+	LengthSourceDescriptor uint16 `struc:"little,sizeof=SourceDescriptor"`
+	SourceDescriptor       []byte
+}
+
+func (*DeactiveAllPDU) Type() uint16 {
+	return PDUTYPE_DEACTIVATEALLPDU
+}
+
+func (d *DeactiveAllPDU) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	struc.Pack(buff, d)
+	return buff.Bytes()
+}
+
+func readDeactiveAllPDU(r io.Reader) (*DeactiveAllPDU, error) {
+	p := &DeactiveAllPDU{}
+	err := struc.Unpack(r, p)
+	return p, err
+}
+
 type DataPDU struct {
 	Header *ShareDataHeader
 	Data   DataPDUData
@@ -295,6 +324,40 @@ func NewDataPDU(data DataPDUData, shareId uint32) *DataPDU {
 		Header: NewShareDataHeader(len(dataBuff.Bytes()), data.Type2(), shareId),
 		Data:   data,
 	}
+}
+
+func readDataPDU(r io.Reader) (*DataPDU, error) {
+	header := &ShareDataHeader{}
+	err := struc.Unpack(r, header)
+	if err != nil {
+		glog.Error("read data pdu header error", err)
+		return nil, err
+	}
+	var d DataPDUData
+	switch header.PDUType2 {
+	case PDUTYPE2_SYNCHRONIZE:
+		d = &SynchronizeDataPDU{}
+	case PDUTYPE2_CONTROL:
+		d = &ControlDataPDU{}
+	case PDUTYPE2_FONTLIST:
+		d = &FontListDataPDU{}
+	case PDUTYPE2_SET_ERROR_INFO_PDU:
+		d = &ErrorInfoDataPDU{}
+	default:
+		err = errors.New(fmt.Sprintf("Unknown data pdu type2 0x%02x", header.PDUType2))
+		glog.Error(err)
+		return nil, err
+	}
+	err = struc.Unpack(r, d)
+	if err != nil {
+		glog.Error("read data pdu data error", err)
+		return nil, err
+	}
+	p := &DataPDU{
+		Header: header,
+		Data:   d,
+	}
+	return p, nil
 }
 
 type DataPDUData interface {
@@ -338,6 +401,14 @@ func (*FontListDataPDU) Type2() uint8 {
 	return PDUTYPE2_FONTLIST
 }
 
+type ErrorInfoDataPDU struct {
+	ErrorInfo uint32 `struc:"little"`
+}
+
+func (*ErrorInfoDataPDU) Type2() uint8 {
+	return PDUTYPE2_SET_ERROR_INFO_PDU
+}
+
 type PDU struct {
 	ShareCtrlHeader *ShareControlHeader
 	Message         PDUMessage
@@ -364,16 +435,23 @@ func readPDU(r io.Reader) (*PDU, error) {
 	}
 	pdu.ShareCtrlHeader = header
 
+	var d PDUMessage
 	switch pdu.ShareCtrlHeader.PDUType {
 	case PDUTYPE_DEMANDACTIVEPDU:
-		d, err := readDemandActivePDU(r)
-		if err != nil {
-			return nil, err
-		}
-		pdu.Message = d
+		d, err = readDemandActivePDU(r)
+	case PDUTYPE_DATAPDU:
+		d, err = readDataPDU(r)
+	case PDUTYPE_CONFIRMACTIVEPDU:
+		d, err = readConfirmActivePDU(r)
+	case PDUTYPE_DEACTIVATEALLPDU:
+		d, err = readDeactiveAllPDU(r)
 	default:
 		glog.Error("PDU invalid pdu type")
 	}
+	if err != nil {
+		return nil, err
+	}
+	pdu.Message = d
 	return pdu, err
 }
 
