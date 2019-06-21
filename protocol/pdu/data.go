@@ -62,7 +62,7 @@ const (
 
 type ShareDataHeader struct {
 	SharedId           uint32 `struc:"little"`
-	Padding1           uint8  `struc:"pad"`
+	Padding1           uint8  `struc:"little"`
 	StreamId           uint8  `struc:"little"`
 	UncompressedLength uint16 `struc:"little"`
 	PDUType2           uint8  `struc:"little"`
@@ -70,18 +70,12 @@ type ShareDataHeader struct {
 	CompressedLength   uint16 `struc:"little"`
 }
 
-type ShareControlHeader struct {
-	TotalLength uint16 `struc:"little"`
-	PDUType     uint16 `struc:"little"`
-	PDUSource   uint16 `struc:"little"`
-}
-
 func NewShareDataHeader(size int, type2 uint8, shareId uint32) *ShareDataHeader {
 	return &ShareDataHeader{
 		SharedId:           shareId,
 		PDUType2:           type2,
 		StreamId:           STREAM_LOW,
-		UncompressedLength: uint16(size - 8),
+		UncompressedLength: uint16(size + 4),
 	}
 }
 
@@ -237,7 +231,7 @@ type ConfirmActivePDU struct {
 	LengthCombinedCapabilities uint16       `struc:"little"`
 	SourceDescriptor           string       `struc:"sizefrom=LengthSourceDescriptor"`
 	NumberCapabilities         uint16       `struc:"little,sizeof=CapabilitySets"`
-	Pad2Octets                 uint16       `struc:"pad"`
+	Pad2Octets                 uint16       `struc:"little"`
 	CapabilitySets             []Capability `struc:"sizefrom=NumberCapabilities"`
 }
 
@@ -253,13 +247,19 @@ func (c *ConfirmActivePDU) Serialize() []byte {
 
 	capsBuff := &bytes.Buffer{}
 	for _, capa := range c.CapabilitySets {
-		struc.Pack(capsBuff, capa)
+		core.WriteUInt16LE(uint16(capa.Type()), capsBuff)
+		capBuff := &bytes.Buffer{}
+		struc.Pack(capBuff, capa)
+		if capa.Type() == CAPSTYPE_INPUT {
+			core.WriteBytes([]byte{0x0c, 0x00, 0x00, 0x00}, capBuff)
+		}
+		capBytes := capBuff.Bytes()
+		core.WriteUInt16LE(uint16(len(capBytes)+4), capsBuff)
+		core.WriteBytes(capBytes, capsBuff)
 	}
 	capsBytes := capsBuff.Bytes()
 
-	// lengthCombinedCapabilities = UInt16Le(lambda:(sizeof(numberCapabilities) + sizeof(pad2Octets) + sizeof(capabilitySets)))
 	core.WriteUInt16LE(uint16(2+2+len(capsBytes)), buff)
-
 	core.WriteBytes([]byte(c.SourceDescriptor), buff)
 	core.WriteUInt16LE(uint16(len(c.CapabilitySets)), buff)
 	core.WriteUInt16LE(c.Pad2Octets, buff)
@@ -267,10 +267,35 @@ func (c *ConfirmActivePDU) Serialize() []byte {
 	return buff.Bytes()
 }
 
+// 9401 => share control header
+// 1300 => share control header
+// ec03 => share control header
+// ea030100  => shareId 66538
+// ea03 => OriginatorId
+// 0400
+// 8001 => LengthCombinedCapabilities
+// 72647079
+// 0c00 => NumberCapabilities 12
+// 0000
+// caps below
+// 010018000100030000020000000015040000000000000000
+// 02001c00180001000100010000052003000000000100000001000000
+// 030058000000000000000000000000000000000000000000010014000000010000000a0000000000000000000000000000000000000000000000000000000000000000000000000000000000008403000000000000000000
+// 04002800000000000000000000000000000000000000000000000000000000000000000000000000
+// 0800080000001400
+// 0c00080000000000
+// 0d005c001500000009040000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000
+// 0f00080000000000
+// 10003400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+// 11000c000000000000000000
+// 14000c000000000000000000
+// 1a00080000000000
+
 func NewConfirmActivePDU() *ConfirmActivePDU {
 	return &ConfirmActivePDU{
-		OriginatorId:   0x03EA,
-		CapabilitySets: make([]Capability, 0),
+		OriginatorId:     0x03EA,
+		CapabilitySets:   make([]Capability, 0),
+		SourceDescriptor: "rdpy",
 	}
 }
 
@@ -313,7 +338,8 @@ func (*DataPDU) Type() uint16 {
 
 func (d *DataPDU) Serialize() []byte {
 	buff := &bytes.Buffer{}
-	struc.Pack(buff, d)
+	struc.Pack(buff, d.Header)
+	struc.Pack(buff, d.Data)
 	return buff.Bytes()
 }
 
@@ -422,6 +448,12 @@ func (*FontMapDataPDU) Type2() uint8 {
 	return PDUTYPE2_FONTMAP
 }
 
+type ShareControlHeader struct {
+	TotalLength uint16 `struc:"little"`
+	PDUType     uint16 `struc:"little"`
+	PDUSource   uint16 `struc:"little"`
+}
+
 type PDU struct {
 	ShareCtrlHeader *ShareControlHeader
 	Message         PDUMessage
@@ -430,7 +462,7 @@ type PDU struct {
 func NewPDU(userId uint16, message PDUMessage) *PDU {
 	pdu := &PDU{}
 	pdu.ShareCtrlHeader = &ShareControlHeader{
-		TotalLength: uint16(len(message.Serialize())),
+		TotalLength: uint16(len(message.Serialize()) + 6),
 		PDUType:     message.Type(),
 		PDUSource:   userId,
 	}

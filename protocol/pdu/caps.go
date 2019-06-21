@@ -63,14 +63,12 @@ const (
 	OSMINORTYPE_WINDOWS_RT               = 0x0009
 )
 
-type GeneralExtraFlag uint16
-
 const (
-	FASTPATH_OUTPUT_SUPPORTED  GeneralExtraFlag = 0x0001
-	NO_BITMAP_COMPRESSION_HDR                   = 0x0400
-	LONG_CREDENTIALS_SUPPORTED                  = 0x0004
-	AUTORECONNECT_SUPPORTED                     = 0x0008
-	ENC_SALTED_CHECKSUM                         = 0x0010
+	FASTPATH_OUTPUT_SUPPORTED  uint16 = 0x0001
+	NO_BITMAP_COMPRESSION_HDR         = 0x0400
+	LONG_CREDENTIALS_SUPPORTED        = 0x0004
+	AUTORECONNECT_SUPPORTED           = 0x0008
+	ENC_SALTED_CHECKSUM               = 0x0010
 )
 
 type OrderFlag uint16
@@ -190,10 +188,11 @@ type Capability interface {
 }
 
 type GeneralCapability struct {
+	// 010018000100030000020000000015040000000000000000
 	OSMajorType             MajorType `struc:"little"`
 	OSMinorType             MinorType `struc:"little"`
 	ProtocolVersion         uint16    `struc:"little"`
-	Pad2octetsA             uint16    `struc:"pad"`
+	Pad2octetsA             uint16    `struc:"little"`
 	GeneralCompressionTypes uint16    `struc:"little"`
 	ExtraFlags              uint16    `struc:"little"`
 	UpdateCapabilityFlag    uint16    `struc:"little"`
@@ -208,19 +207,20 @@ func (*GeneralCapability) Type() CapsType {
 }
 
 type BitmapCapability struct {
+	// 02001c00180001000100010000052003000000000100000001000000
 	PreferredBitsPerPixel    gcc.HighColor `struc:"little"`
 	Receive1BitPerPixel      uint16        `struc:"little"`
 	Receive4BitsPerPixel     uint16        `struc:"little"`
 	Receive8BitsPerPixel     uint16        `struc:"little"`
 	DesktopWidth             uint16        `struc:"little"`
 	DesktopHeight            uint16        `struc:"little"`
-	Pad2octets               uint16        `struc:"pad"`
+	Pad2octets               uint16        `struc:"little"`
 	DesktopResizeFlag        uint16        `struc:"little"`
 	BitmapCompressionFlag    uint16        `struc:"little"`
 	HighColorFlags           uint8         `struc:"little"`
 	DrawingFlags             uint8         `struc:"little"`
 	MultipleRectangleSupport uint16        `struc:"little"`
-	Pad2octetsB              uint16        `struc:"pad"`
+	Pad2octetsB              uint16        `struc:"little"`
 }
 
 func (*BitmapCapability) Type() CapsType {
@@ -228,12 +228,13 @@ func (*BitmapCapability) Type() CapsType {
 }
 
 type BitmapCacheCapability struct {
-	Pad1                  uint32 `struc:"pad"`
-	Pad2                  uint32 `struc:"pad"`
-	Pad3                  uint32 `struc:"pad"`
-	Pad4                  uint32 `struc:"pad"`
-	Pad5                  uint32 `struc:"pad"`
-	Pad6                  uint32 `struc:"pad"`
+	// 04002800000000000000000000000000000000000000000000000000000000000000000000000000
+	Pad1                  uint32 `struc:"little"`
+	Pad2                  uint32 `struc:"little"`
+	Pad3                  uint32 `struc:"little"`
+	Pad4                  uint32 `struc:"little"`
+	Pad5                  uint32 `struc:"little"`
+	Pad6                  uint32 `struc:"little"`
 	Cache0Entries         uint16 `struc:"little"`
 	Cache0MaximumCellSize uint16 `struc:"little"`
 	Cache1Entries         uint16 `struc:"little"`
@@ -247,23 +248,24 @@ func (*BitmapCacheCapability) Type() CapsType {
 }
 
 type OrderCapability struct {
+	// 030058000000000000000000000000000000000000000000010014000000010000000a0000000000000000000000000000000000000000000000000000000000000000000000000000000000008403000000000000000000
 	TerminalDescriptor      [16]byte
-	Pad4octetsA             uint32    `struc:"pad"`
+	Pad4octetsA             uint32    `struc:"little"`
 	DesktopSaveXGranularity uint16    `struc:"little"`
 	DesktopSaveYGranularity uint16    `struc:"little"`
-	Pad2octetsA             uint16    `struc:"pad"`
+	Pad2octetsA             uint16    `struc:"little"`
 	MaximumOrderLevel       uint16    `struc:"little"`
 	NumberFonts             uint16    `struc:"little"`
 	OrderFlags              OrderFlag `struc:"little"`
 	OrderSupport            [32]byte
 	TextFlags               uint16 `struc:"little"`
 	OrderSupportExFlags     uint16 `struc:"little"`
-	Pad4octetsB             uint32 `struc:"pad"`
+	Pad4octetsB             uint32 `struc:"little"`
 	DesktopSaveSize         uint32 `struc:"little"`
-	Pad2octetsC             uint16 `struc:"pad"`
-	Pad2octetsD             uint16 `struc:"pad"`
+	Pad2octetsC             uint16 `struc:"little"`
+	Pad2octetsD             uint16 `struc:"little"`
 	TextANSICodePage        uint16 `struc:"little"`
-	Pad2octetsE             uint16 `struc:"pad"`
+	Pad2octetsE             uint16 `struc:"little"`
 }
 
 func (*OrderCapability) Type() CapsType {
@@ -273,8 +275,8 @@ func (*OrderCapability) Type() CapsType {
 type PointerCapability struct {
 	ColorPointerFlag      uint16 `struc:"little"`
 	ColorPointerCacheSize uint16 `struc:"little"`
-	//old version of rdp doesn't support ...
-	PointerCacheSize uint16 `struc:"little"`
+	// old version of rdp doesn't support ...
+	// PointerCacheSize uint16 `struc:"little"` // only server need
 }
 
 func (*PointerCapability) Type() CapsType {
@@ -282,8 +284,9 @@ func (*PointerCapability) Type() CapsType {
 }
 
 type InputCapability struct {
+	// 0d005c001500000009040000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000
 	Flags       uint16 `struc:"little"`
-	Pad2octetsA uint16 `struc:"pad"`
+	Pad2octetsA uint16 `struc:"little"`
 	// same value as gcc.ClientCoreSettings.kbdLayout
 	KeyboardLayout gcc.KeyboardLayout `struc:"little"`
 	// same value as gcc.ClientCoreSettings.keyboardType
@@ -293,7 +296,8 @@ type InputCapability struct {
 	// same value as gcc.ClientCoreSettings.keyboardFnKeys
 	KeyboardFunctionKey uint32 `struc:"little"`
 	// same value as gcc.ClientCoreSettingrrs.imeFileName
-	ImeFileName [64]byte `struc:"little"`
+	ImeFileName [64]byte
+	//need add 0c000000 in the end
 }
 
 func (*InputCapability) Type() CapsType {
@@ -301,6 +305,7 @@ func (*InputCapability) Type() CapsType {
 }
 
 type BrushCapability struct {
+	// 0f00080000000000
 	SupportLevel BrushSupport `struc:"little"`
 }
 
@@ -314,10 +319,11 @@ type cacheEntry struct {
 }
 
 type GlyphCapability struct {
+	// 10003400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 	GlyphCache   [10]cacheEntry `struc:"little"`
 	FragCache    uint32         `struc:"little"`
 	SupportLevel GlyphSupport   `struc:"little"`
-	Pad2octets   uint16         `struc:"pad"`
+	Pad2octets   uint16         `struc:"little"`
 }
 
 func (*GlyphCapability) Type() CapsType {
@@ -325,6 +331,7 @@ func (*GlyphCapability) Type() CapsType {
 }
 
 type OffscreenBitmapCacheCapability struct {
+	// 11000c000000000000000000
 	SupportLevel OffscreenSupportLevel `struc:"little"`
 	CacheSize    uint16                `struc:"little"`
 	CacheEntries uint16                `struc:"little"`
@@ -335,6 +342,7 @@ func (*OffscreenBitmapCacheCapability) Type() CapsType {
 }
 
 type VirtualChannelCapability struct {
+	// 14000c000000000000000000
 	Flags       VirtualChannelCompressionFlag `struc:"little"`
 	VCChunkSize uint32                        `struc:"little"` // optional
 }
@@ -344,6 +352,7 @@ func (*VirtualChannelCapability) Type() CapsType {
 }
 
 type SoundCapability struct {
+	// 0c00080000000000
 	Flags      SoundFlag `struc:"little"`
 	Pad2octets uint16    `struc:"little"`
 }
@@ -376,7 +385,7 @@ func (*WindowActivationCapability) Type() CapsType {
 
 type FontCapability struct {
 	SupportFlags uint16 `struc:"little"`
-	Pad2octets   uint16 `struc:"pad"`
+	Pad2octets   uint16 `struc:"little"`
 }
 
 func (*FontCapability) Type() CapsType {
@@ -385,7 +394,7 @@ func (*FontCapability) Type() CapsType {
 
 type ColorCacheCapability struct {
 	CacheSize  uint16 `struc:"little"`
-	Pad2octets uint16 `struc:"pad"`
+	Pad2octets uint16 `struc:"little"`
 }
 
 func (*ColorCacheCapability) Type() CapsType {
@@ -394,7 +403,7 @@ func (*ColorCacheCapability) Type() CapsType {
 
 type ShareCapability struct {
 	NodeId     uint16 `struc:"little"`
-	Pad2octets uint16 `struc:"pad"`
+	Pad2octets uint16 `struc:"little"`
 }
 
 func (*ShareCapability) Type() CapsType {
@@ -402,6 +411,7 @@ func (*ShareCapability) Type() CapsType {
 }
 
 type MultiFragmentUpdate struct {
+	// 1a00080000000000
 	MaxRequestSize uint32 `struc:"little"`
 }
 

@@ -149,7 +149,7 @@ func (c *Client) sendConfirmActivePDU() {
 	generalCapa.OSMinorType = OSMINORTYPE_WINDOWS_NT
 	generalCapa.ExtraFlags = LONG_CREDENTIALS_SUPPORTED | NO_BITMAP_COMPRESSION_HDR | ENC_SALTED_CHECKSUM
 	//if not self._fastPathSender is None:
-	//generalCapability.extraFlags.value |= caps.GeneralExtraFlag.FASTPATH_OUTPUT_SUPPORTED
+	generalCapa.ExtraFlags |= FASTPATH_OUTPUT_SUPPORTED
 
 	bitmapCapa := c.clientCapabilities[CAPSTYPE_BITMAP].(*BitmapCapability)
 	bitmapCapa.PreferredBitsPerPixel = c.clientCoreData.HighColorDepth
@@ -164,7 +164,7 @@ func (c *Client) sendConfirmActivePDU() {
 	inputCapa.KeyboardLayout = c.clientCoreData.KbdLayout
 	inputCapa.KeyboardType = c.clientCoreData.KeyboardType
 	inputCapa.KeyboardSubType = c.clientCoreData.KeyboardSubType
-	inputCapa.KeyboardFunctionKey = c.clientCoreData.KeyboardFnKeys
+	// inputCapa.KeyboardFunctionKey = c.clientCoreData.KeyboardFnKeys
 	inputCapa.ImeFileName = c.clientCoreData.ImeFileName
 
 	pdu := NewConfirmActivePDU()
@@ -194,9 +194,9 @@ func (c *Client) recvServerSynchronizePDU(s []byte) {
 	dataPdu, ok := pdu.Message.(*DataPDU)
 	if !ok || dataPdu.Header.PDUType2 != PDUTYPE2_SYNCHRONIZE {
 		if ok {
-			glog.Info("recvServerSynchronizePDU ignore datapdu type2", dataPdu.Header.PDUType2)
+			glog.Error("recvServerSynchronizePDU ignore datapdu type2", dataPdu.Header.PDUType2)
 		} else {
-			glog.Info("recvServerSynchronizePDU ignore message type", pdu.ShareCtrlHeader.PDUType)
+			glog.Error("recvServerSynchronizePDU ignore message type", pdu.ShareCtrlHeader.PDUType)
 		}
 		c.transport.Once("data", c.recvServerSynchronizePDU)
 		return
