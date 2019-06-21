@@ -343,6 +343,8 @@ func readDataPDU(r io.Reader) (*DataPDU, error) {
 		d = &FontListDataPDU{}
 	case PDUTYPE2_SET_ERROR_INFO_PDU:
 		d = &ErrorInfoDataPDU{}
+	case PDUTYPE2_FONTMAP:
+		d = &FontMapDataPDU{}
 	default:
 		err = errors.New(fmt.Sprintf("Unknown data pdu type2 0x%02x", header.PDUType2))
 		glog.Error(err)
@@ -407,6 +409,17 @@ type ErrorInfoDataPDU struct {
 
 func (*ErrorInfoDataPDU) Type2() uint8 {
 	return PDUTYPE2_SET_ERROR_INFO_PDU
+}
+
+type FontMapDataPDU struct {
+	NumberEntries   uint16 `struc:"little"`
+	TotalNumEntries uint16 `struc:"little"`
+	MapFlags        uint16 `struc:"little"`
+	EntrySize       uint16 `struc:"little"`
+}
+
+func (*FontMapDataPDU) Type2() uint8 {
+	return PDUTYPE2_FONTMAP
 }
 
 type PDU struct {

@@ -206,9 +206,78 @@ func (c *Client) recvServerSynchronizePDU(s []byte) {
 
 func (c *Client) recvServerControlCooperatePDU(s []byte) {
 	glog.Debug("PDU recvServerControlCooperatePDU")
-	// todo
+	r := bytes.NewReader(s)
+	pdu, err := readPDU(r)
+	if err != nil {
+		glog.Error(err)
+		return
+	}
+	dataPdu, ok := pdu.Message.(*DataPDU)
+	if !ok || dataPdu.Header.PDUType2 != PDUTYPE2_CONTROL {
+		if ok {
+			glog.Error("recvServerControlCooperatePDU ignore datapdu type2", dataPdu.Header.PDUType2)
+		} else {
+			glog.Error("recvServerControlCooperatePDU ignore message type", pdu.ShareCtrlHeader.PDUType)
+		}
+		c.transport.Once("data", c.recvServerControlCooperatePDU)
+		return
+	}
+	if dataPdu.Data.(*ControlDataPDU).Action != CTRLACTION_COOPERATE {
+		glog.Error("recvServerControlCooperatePDU ignore action", dataPdu.Data.(*ControlDataPDU).Action)
+		c.transport.Once("data", c.recvServerControlCooperatePDU)
+		return
+	}
+	c.transport.Once("data", c.recvServerControlGrantedPDU)
 }
 
-func (c *Client) recvPDU() {
+func (c *Client) recvServerControlGrantedPDU(s []byte) {
+	glog.Debug("PDU recvServerControlGrantedPDU")
+	r := bytes.NewReader(s)
+	pdu, err := readPDU(r)
+	if err != nil {
+		glog.Error(err)
+		return
+	}
+	dataPdu, ok := pdu.Message.(*DataPDU)
+	if !ok || dataPdu.Header.PDUType2 != PDUTYPE2_CONTROL {
+		if ok {
+			glog.Error("recvServerControlGrantedPDU ignore datapdu type2", dataPdu.Header.PDUType2)
+		} else {
+			glog.Error("recvServerControlGrantedPDU ignore message type", pdu.ShareCtrlHeader.PDUType)
+		}
+		c.transport.Once("data", c.recvServerControlGrantedPDU)
+		return
+	}
+	if dataPdu.Data.(*ControlDataPDU).Action != CTRLACTION_GRANTED_CONTROL {
+		glog.Error("recvServerControlGrantedPDU ignore action", dataPdu.Data.(*ControlDataPDU).Action)
+		c.transport.Once("data", c.recvServerControlGrantedPDU)
+		return
+	}
+	c.transport.Once("data", c.recvServerFontMapPDU)
+}
+
+func (c *Client) recvServerFontMapPDU(s []byte) {
+	glog.Debug("PDU recvServerFontMapPDU")
+	r := bytes.NewReader(s)
+	pdu, err := readPDU(r)
+	if err != nil {
+		glog.Error(err)
+		return
+	}
+	dataPdu, ok := pdu.Message.(*DataPDU)
+	if !ok || dataPdu.Header.PDUType2 != PDUTYPE2_FONTMAP {
+		if ok {
+			glog.Error("recvServerFontMapPDU ignore datapdu type2", dataPdu.Header.PDUType2)
+		} else {
+			glog.Error("recvServerFontMapPDU ignore message type", pdu.ShareCtrlHeader.PDUType)
+		}
+		return
+	}
+	c.transport.Once("data", c.recvPDU)
+	// todo
+	// self._listener.onReady()
+}
+
+func (c *Client) recvPDU(s []byte) {
 	// todo
 }
