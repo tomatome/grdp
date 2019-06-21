@@ -53,6 +53,9 @@ func (g *Client) Login(user, pwd string) error {
 	g.sec.SetPwd(pwd)
 	g.sec.SetDomain(strings.Split(g.Host, ":")[0])
 
+	g.tpkt.SetFastPathListener(g.pdu)
+	g.pdu.SetFastPathSender(g.tpkt)
+
 	err = g.x224.Connect()
 	if err != nil {
 		return errors.New(fmt.Sprintf("[x224 connect err] %v", err))

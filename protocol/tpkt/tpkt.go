@@ -16,11 +16,9 @@ import (
  * @see http://msdn.microsoft.com/en-us/library/cc240621.aspx
  * @see http://msdn.microsoft.com/en-us/library/cc240589.aspx
  */
-type TpktAction byte
-
 const (
-	FASTPATH_ACTION_FASTPATH TpktAction = 0x0
-	FASTPATH_ACTION_X224                = 0x3
+	FASTPATH_ACTION_FASTPATH = 0x0
+	FASTPATH_ACTION_X224     = 0x3
 )
 
 /**
@@ -28,12 +26,16 @@ const (
  */
 type TPKT struct {
 	emission.Emitter
-	Conn    *core.SocketLayer
-	secFlag byte
+	Conn             *core.SocketLayer
+	secFlag          byte
+	fastPathListener core.FastPathListener
 }
 
 func New(s *core.SocketLayer) *TPKT {
-	t := &TPKT{*emission.NewEmitter(), s, 0}
+	t := &TPKT{
+		Emitter: *emission.NewEmitter(),
+		Conn:    s,
+		secFlag: 0}
 	core.StartReadBytes(2, s, t.recvHeader)
 	return t
 }
@@ -54,6 +56,19 @@ func (t *TPKT) Write(data []byte) (n int, err error) {
 
 func (t *TPKT) Close() error {
 	return t.Conn.Close()
+}
+
+func (t *TPKT) SetFastPathListener(f core.FastPathListener) {
+	t.fastPathListener = f
+}
+
+func (t *TPKT) SendFastPath(secFlag byte, data []byte) (n int, err error) {
+	buff := &bytes.Buffer{}
+	core.WriteUInt8(FASTPATH_ACTION_FASTPATH|((secFlag&0x3)<<6), buff)
+	core.WriteUInt16BE(uint16(len(data)+3)|0x8000, buff)
+	buff.Write(data)
+	glog.Debug("TPTK SendFastPath", hex.EncodeToString(buff.Bytes()))
+	return t.Conn.Write(buff.Bytes())
 }
 
 func (t *TPKT) recvHeader(s []byte, err error) {
@@ -102,9 +117,22 @@ func (t *TPKT) recvData(s []byte, err error) {
 
 func (t *TPKT) recvExtendedFastPathHeader(s []byte, length int, err error) {
 	glog.Debug("tpkt recvExtendedFastPathHeader", hex.EncodeToString(s), length, err)
-
+	r := bytes.NewReader(s)
+	rightPart, err := core.ReadUInt8(r)
+	if err != nil {
+		glog.Error("TPTK recvExtendedFastPathHeader", err)
+		return
+	}
+	leftPart := length & ^0x80
+	packetSize := (leftPart << 8) + int(rightPart)
+	core.StartReadBytes(packetSize-3, t.Conn, t.recvFastPath)
 }
 
 func (t *TPKT) recvFastPath(s []byte, err error) {
-	glog.Debug("tpkt recvFastPath", s, err)
+	glog.Debug("tpkt recvFastPath")
+	if err != nil {
+		return
+	}
+	t.fastPathListener.RecvFastPath(t.secFlag, s)
+	core.StartReadBytes(2, t.Conn, t.recvHeader)
 }

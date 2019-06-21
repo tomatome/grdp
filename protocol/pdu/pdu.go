@@ -3,6 +3,7 @@ package pdu
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/emission"
 	"github.com/icodeface/grdp/glog"
@@ -17,6 +18,7 @@ type PDULayer struct {
 	channelId          uint16
 	serverCapabilities map[CapsType]Capability
 	clientCapabilities map[CapsType]Capability
+	fastPathSender     core.FastPathSender
 }
 
 func NewPDULayer(t core.Transport) *PDULayer {
@@ -95,6 +97,10 @@ func (p *PDULayer) sendPDU(message PDUMessage) {
 func (p *PDULayer) sendDataPDU(message DataPDUData) {
 	dataPdu := NewDataPDU(message, p.sharedId)
 	p.sendPDU(dataPdu)
+}
+
+func (p *PDULayer) SetFastPathSender(f core.FastPathSender) {
+	p.fastPathSender = f
 }
 
 type Client struct {
@@ -280,4 +286,9 @@ func (c *Client) recvServerFontMapPDU(s []byte) {
 
 func (c *Client) recvPDU(s []byte) {
 	// todo
+	fmt.Println("PDU todo recvPDU", hex.EncodeToString(s))
+}
+
+func (c *Client) RecvFastPath(secFlag byte, s []byte) {
+	glog.Debug("PDU todo RecvFastPath", hex.EncodeToString(s))
 }

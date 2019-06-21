@@ -11,3 +11,11 @@ type Transport interface {
 	Once(event, listener interface{}) *emission.Emitter
 	Emit(event interface{}, arguments ...interface{}) *emission.Emitter
 }
+
+type FastPathListener interface {
+	RecvFastPath(secFlag byte, s []byte)
+}
+
+type FastPathSender interface {
+	SendFastPath(secFlag byte, s []byte) (int, error)
+}
