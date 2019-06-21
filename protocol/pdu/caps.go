@@ -1,6 +1,16 @@
 package pdu
 
-import "github.com/icodeface/grdp/protocol/t125/gcc"
+import (
+	"bytes"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"github.com/icodeface/grdp/core"
+	"github.com/icodeface/grdp/glog"
+	"github.com/icodeface/grdp/protocol/t125/gcc"
+	"github.com/lunixbochs/struc"
+	"io"
+)
 
 type CapsType uint16
 
@@ -514,4 +524,83 @@ type SurfaceCommandsCapability struct {
 
 func (*SurfaceCommandsCapability) Type() CapsType {
 	return CAPSETTYPE_SURFACE_COMMANDS
+}
+
+func readCapability(r io.Reader) (Capability, error) {
+	capType, err := core.ReadUint16LE(r)
+	if err != nil {
+		return nil, err
+	}
+	capLen, err := core.ReadUint16LE(r)
+	if err != nil {
+		return nil, err
+	}
+	capBytes, err := core.ReadBytes(int(capLen)-4, r)
+	if err != nil {
+		return nil, err
+	}
+	capReader := bytes.NewReader(capBytes)
+
+	var c Capability
+	switch CapsType(capType) {
+	case CAPSTYPE_GENERAL:
+		c = &GeneralCapability{}
+	case CAPSTYPE_BITMAP:
+		c = &BitmapCapability{}
+	case CAPSTYPE_ORDER:
+		c = &OrderCapability{}
+	case CAPSTYPE_BITMAPCACHE:
+		c = &BitmapCacheCapability{}
+	case CAPSTYPE_POINTER:
+		c = &PointerCapability{}
+	case CAPSTYPE_INPUT:
+		c = &InputCapability{}
+	case CAPSTYPE_BRUSH:
+		c = &BrushCapability{}
+	case CAPSTYPE_GLYPHCACHE:
+		c = &GlyphCapability{}
+	case CAPSTYPE_OFFSCREENCACHE:
+		c = &OffscreenBitmapCacheCapability{}
+	case CAPSTYPE_VIRTUALCHANNEL:
+		c = &VirtualChannelCapability{}
+	case CAPSTYPE_SOUND:
+		c = &SoundCapability{}
+	case CAPSTYPE_CONTROL:
+		c = &ControlCapability{}
+	case CAPSTYPE_ACTIVATION:
+		c = &WindowActivationCapability{}
+	case CAPSTYPE_FONT:
+		c = &FontCapability{}
+	case CAPSTYPE_COLORCACHE:
+		c = &ColorCacheCapability{}
+	case CAPSTYPE_SHARE:
+		c = &ShareCapability{}
+	case CAPSETTYPE_MULTIFRAGMENTUPDATE:
+		c = &MultiFragmentUpdate{}
+	case CAPSTYPE_DRAWGDIPLUS:
+		c = &DrawGDIPlusCapability{}
+	case CAPSETTYPE_BITMAP_CODECS:
+		c = &BitmapCodecsCapability{}
+	case CAPSTYPE_BITMAPCACHE_HOSTSUPPORT:
+		c = &BitmapCacheHostSupportCapability{}
+	case CAPSETTYPE_LARGE_POINTER:
+		c = &LargePointerCapability{}
+	case CAPSTYPE_RAIL:
+		c = &RemoteProgramsCapability{}
+	case CAPSTYPE_WINDOW:
+		c = &WindowListCapability{}
+	case CAPSETTYPE_COMPDESK:
+		c = &DesktopCompositionCapability{}
+	case CAPSETTYPE_SURFACE_COMMANDS:
+		c = &SurfaceCommandsCapability{}
+	default:
+		err := errors.New(fmt.Sprintf("unsupported Capability type 0x%04x", capType))
+		glog.Error(err)
+		return nil, err
+	}
+	if err := struc.Unpack(capReader, c); err != nil {
+		glog.Error("Capability unpack error", err, fmt.Sprintf("0x%04x", capType), hex.EncodeToString(capBytes))
+		return nil, err
+	}
+	return c, nil
 }

@@ -2,7 +2,6 @@ package pdu
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/icodeface/grdp/core"
@@ -138,84 +137,11 @@ func readDemandActivePDU(r io.Reader) (*DemandActivePDU, error) {
 	d.CapabilitySets = make([]Capability, 0)
 	glog.Debug("NumberCapabilities is", d.NumberCapabilities)
 	for i := 0; i < int(d.NumberCapabilities); i++ {
-		capType, err := core.ReadUint16LE(r)
+		c, err := readCapability(r)
 		if err != nil {
 			return nil, err
 		}
-		capLen, err := core.ReadUint16LE(r)
-		if err != nil {
-			return nil, err
-		}
-		capBytes, err := core.ReadBytes(int(capLen)-4, r)
-		if err != nil {
-			return nil, err
-		}
-		capReader := bytes.NewReader(capBytes)
-
-		var c Capability
-		switch CapsType(capType) {
-		case CAPSTYPE_GENERAL:
-			c = &GeneralCapability{}
-		case CAPSTYPE_BITMAP:
-			c = &BitmapCapability{}
-		case CAPSTYPE_ORDER:
-			c = &OrderCapability{}
-		case CAPSTYPE_BITMAPCACHE:
-			c = &BitmapCacheCapability{}
-		case CAPSTYPE_POINTER:
-			c = &PointerCapability{}
-		case CAPSTYPE_INPUT:
-			c = &InputCapability{}
-		case CAPSTYPE_BRUSH:
-			c = &BrushCapability{}
-		case CAPSTYPE_GLYPHCACHE:
-			c = &GlyphCapability{}
-		case CAPSTYPE_OFFSCREENCACHE:
-			c = &OffscreenBitmapCacheCapability{}
-		case CAPSTYPE_VIRTUALCHANNEL:
-			c = &VirtualChannelCapability{}
-		case CAPSTYPE_SOUND:
-			c = &SoundCapability{}
-		case CAPSTYPE_CONTROL:
-			c = &ControlCapability{}
-		case CAPSTYPE_ACTIVATION:
-			c = &WindowActivationCapability{}
-		case CAPSTYPE_FONT:
-			c = &FontCapability{}
-		case CAPSTYPE_COLORCACHE:
-			c = &ColorCacheCapability{}
-		case CAPSTYPE_SHARE:
-			c = &ShareCapability{}
-		case CAPSETTYPE_MULTIFRAGMENTUPDATE:
-			c = &MultiFragmentUpdate{}
-		case CAPSTYPE_DRAWGDIPLUS:
-			c = &DrawGDIPlusCapability{}
-		case CAPSETTYPE_BITMAP_CODECS:
-			c = &BitmapCodecsCapability{}
-		case CAPSTYPE_BITMAPCACHE_HOSTSUPPORT:
-			c = &BitmapCacheHostSupportCapability{}
-		case CAPSETTYPE_LARGE_POINTER:
-			c = &LargePointerCapability{}
-		case CAPSTYPE_RAIL:
-			c = &RemoteProgramsCapability{}
-		case CAPSTYPE_WINDOW:
-			c = &WindowListCapability{}
-		case CAPSETTYPE_COMPDESK:
-			c = &DesktopCompositionCapability{}
-		case CAPSETTYPE_SURFACE_COMMANDS:
-			c = &SurfaceCommandsCapability{}
-		default:
-			glog.Error("unknown Capability type", fmt.Sprintf("0x%04x", capType))
-			c = nil
-		}
-
-		if c != nil {
-			if err := struc.Unpack(capReader, c); err != nil {
-				glog.Error("Capability unpack error", err, fmt.Sprintf("0x%04x", capType), hex.EncodeToString(capBytes))
-				return nil, err
-			}
-			d.CapabilitySets = append(d.CapabilitySets, c)
-		}
+		d.CapabilitySets = append(d.CapabilitySets, c)
 	}
 	d.SessionId, err = core.ReadUInt32LE(r)
 	if err != nil {
@@ -300,8 +226,32 @@ func NewConfirmActivePDU() *ConfirmActivePDU {
 }
 
 func readConfirmActivePDU(r io.Reader) (*ConfirmActivePDU, error) {
-	// todo
 	p := &ConfirmActivePDU{}
+	var err error
+	p.SharedId, err = core.ReadUInt32LE(r)
+	if err != nil {
+		return nil, err
+	}
+	p.OriginatorId, err = core.ReadUint16LE(r)
+	p.LengthSourceDescriptor, err = core.ReadUint16LE(r)
+	p.LengthCombinedCapabilities, err = core.ReadUint16LE(r)
+
+	sourceDescriptorBytes, err := core.ReadBytes(int(p.LengthSourceDescriptor), r)
+	if err != nil {
+		return nil, err
+	}
+	p.SourceDescriptor = string(sourceDescriptorBytes)
+	p.NumberCapabilities, err = core.ReadUint16LE(r)
+	p.Pad2Octets, err = core.ReadUint16LE(r)
+
+	p.CapabilitySets = make([]Capability, 0)
+	for i := 0; i < int(p.NumberCapabilities); i++ {
+		c, err := readCapability(r)
+		if err != nil {
+			return nil, err
+		}
+		p.CapabilitySets = append(p.CapabilitySets, c)
+	}
 	return p, nil
 }
 
