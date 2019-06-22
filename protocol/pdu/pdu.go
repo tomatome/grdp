@@ -280,15 +280,35 @@ func (c *Client) recvServerFontMapPDU(s []byte) {
 		return
 	}
 	c.transport.Once("data", c.recvPDU)
-	// todo
-	// self._listener.onReady()
+	c.Emit("ready")
 }
 
 func (c *Client) recvPDU(s []byte) {
-	// todo
-	fmt.Println("PDU todo recvPDU", hex.EncodeToString(s))
+	fmt.Println("PDU recvPDU", hex.EncodeToString(s))
+	r := bytes.NewReader(s)
+	for r.Len() > 0 {
+		p, err := readPDU(r)
+		if err != nil {
+			glog.Error(err)
+			return
+		}
+		if p.ShareCtrlHeader.PDUType == PDUTYPE_DEACTIVATEALLPDU {
+			c.transport.On("data", c.recvDemandActivePDU)
+		}
+	}
 }
 
 func (c *Client) RecvFastPath(secFlag byte, s []byte) {
-	glog.Debug("PDU todo RecvFastPath", hex.EncodeToString(s))
+	glog.Debug("PDU RecvFastPath", hex.EncodeToString(s))
+	r := bytes.NewReader(s)
+	for r.Len() > 0 {
+		p, err := readFastPathUpdatePDU(r)
+		if err != nil {
+			glog.Error(err)
+			return
+		}
+		if p.UpdateHeader == FASTPATH_UPDATETYPE_BITMAP {
+			c.Emit("update", p.Data.(*FastPathBitmapUpdateDataPDU).Rectangles)
+		}
+	}
 }

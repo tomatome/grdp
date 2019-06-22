@@ -70,12 +70,16 @@ func (g *Client) Login(user, pwd string) error {
 		wg.Done()
 	}).On("close", func() {
 		err = errors.New("close")
-		glog.Info("close")
+		glog.Info("on close")
 		wg.Done()
 	}).On("success", func() {
 		err = nil
-		glog.Info("success")
+		glog.Info("on success")
 		wg.Done()
+	}).On("ready", func() {
+		glog.Info("on ready")
+	}).On("update", func(rectangles []pdu.BitmapData) {
+		glog.Info("on update")
 	})
 
 	wg.Wait()

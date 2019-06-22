@@ -59,6 +59,20 @@ const (
 	STREAM_HI        = 0x04
 )
 
+const (
+	FASTPATH_UPDATETYPE_ORDERS       = 0x0
+	FASTPATH_UPDATETYPE_BITMAP       = 0x1
+	FASTPATH_UPDATETYPE_PALETTE      = 0x2
+	FASTPATH_UPDATETYPE_SYNCHRONIZE  = 0x3
+	FASTPATH_UPDATETYPE_SURFCMDS     = 0x4
+	FASTPATH_UPDATETYPE_PTR_NULL     = 0x5
+	FASTPATH_UPDATETYPE_PTR_DEFAULT  = 0x6
+	FASTPATH_UPDATETYPE_PTR_POSITION = 0x8
+	FASTPATH_UPDATETYPE_COLOR        = 0x9
+	FASTPATH_UPDATETYPE_CACHED       = 0xA
+	FASTPATH_UPDATETYPE_POINTER      = 0xB
+)
+
 type ShareDataHeader struct {
 	SharedId           uint32 `struc:"little"`
 	Padding1           uint8  `struc:"little"`
@@ -396,6 +410,82 @@ type FontMapDataPDU struct {
 
 func (*FontMapDataPDU) Type2() uint8 {
 	return PDUTYPE2_FONTMAP
+}
+
+type UpdateData interface {
+	FastPathUpdateType() uint8
+}
+
+type BitmapCompressedDataHeader struct {
+	CbCompFirstRowSize uint16 `struc:"little"`
+	CbCompMainBodySize uint16 `struc:"little"`
+	CbScanWidth        uint16 `struc:"little"`
+	CbUncompressedSize uint16 `struc:"little"`
+}
+
+type BitmapData struct {
+	DestLeft         uint16 `struc:"little"`
+	DestTop          uint16 `struc:"little"`
+	DestRight        uint16 `struc:"little"`
+	DestBottom       uint16 `struc:"little"`
+	Width            uint16 `struc:"little"`
+	Height           uint16 `struc:"little"`
+	BitsPerPixel     uint16 `struc:"little"`
+	Flags            uint16 `struc:"little"`
+	BitmapLength     uint16 `struc:"little,sizeof=BitmapDataStream"`
+	BitmapComprHdr   *BitmapCompressedDataHeader
+	BitmapDataStream []byte
+}
+
+type FastPathBitmapUpdateDataPDU struct {
+	Header           uint16 `struc:"little"`
+	NumberRectangles uint16 `struc:"little,sizeof=Rectangles"`
+	Rectangles       []BitmapData
+}
+
+func (*FastPathBitmapUpdateDataPDU) FastPathUpdateType() uint8 {
+	return FASTPATH_UPDATETYPE_BITMAP
+}
+
+type FastPathUpdatePDU struct {
+	UpdateHeader     uint8
+	CompressionFlags uint8
+	Size             uint16
+	Data             UpdateData
+}
+
+func readFastPathUpdatePDU(r io.Reader) (*FastPathUpdatePDU, error) {
+	f := &FastPathUpdatePDU{}
+	var err error
+	f.UpdateHeader, err = core.ReadUInt8(r)
+	if err != nil {
+		return nil, err
+	}
+	f.CompressionFlags, err = core.ReadUInt8(r)
+	f.Size, err = core.ReadUint16LE(r)
+	if err != nil {
+		return nil, err
+	}
+	dataBytes, err := core.ReadBytes(int(f.Size), r)
+	if err != nil {
+		return nil, err
+	}
+	var d UpdateData
+	switch f.UpdateHeader & 0xf {
+	case FASTPATH_UPDATETYPE_BITMAP:
+		d = &FastPathBitmapUpdateDataPDU{}
+	default:
+		glog.Debug("unsupported FastPathUpdatePDU data type", f.UpdateHeader)
+		d = nil
+	}
+	if d != nil {
+		err = struc.Unpack(bytes.NewReader(dataBytes), d)
+		if err != nil {
+			return nil, err
+		}
+	}
+	f.Data = d
+	return f, nil
 }
 
 type ShareControlHeader struct {
