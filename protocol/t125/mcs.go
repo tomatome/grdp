@@ -11,7 +11,6 @@ import (
 	"github.com/icodeface/grdp/protocol/t125/ber"
 	"github.com/icodeface/grdp/protocol/t125/gcc"
 	"github.com/icodeface/grdp/protocol/t125/per"
-	"github.com/icodeface/grdp/protocol/x224"
 	"io"
 )
 
@@ -265,9 +264,9 @@ func NewMCSClient(t core.Transport) *MCSClient {
 	return c
 }
 
-func (c *MCSClient) connect(selectedProtocol x224.Protocol) {
+func (c *MCSClient) connect(selectedProtocol uint32) {
 	glog.Debug("mcs client on connect", selectedProtocol)
-	c.clientCoreData.ServerSelectedProtocol = uint32(selectedProtocol)
+	c.clientCoreData.ServerSelectedProtocol = selectedProtocol
 
 	// sendConnectInitial
 	userDataBuff := bytes.Buffer{}

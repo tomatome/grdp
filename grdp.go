@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/glog"
+	"github.com/icodeface/grdp/protocol/nla"
 	"github.com/icodeface/grdp/protocol/pdu"
 	"github.com/icodeface/grdp/protocol/sec"
 	"github.com/icodeface/grdp/protocol/t125"
@@ -43,7 +44,9 @@ func (g *Client) Login(user, pwd string) error {
 	}
 	defer conn.Close()
 
-	g.tpkt = tpkt.New(core.NewSocketLayer(conn))
+	domain := strings.Split(g.Host, ":")[0]
+
+	g.tpkt = tpkt.New(core.NewSocketLayer(conn, nla.NewNTLMv2(domain, user, pwd)))
 	g.x224 = x224.New(g.tpkt)
 	g.mcs = t125.NewMCSClient(g.x224)
 	g.sec = sec.NewClient(g.mcs)
@@ -51,10 +54,12 @@ func (g *Client) Login(user, pwd string) error {
 
 	g.sec.SetUser(user)
 	g.sec.SetPwd(pwd)
-	g.sec.SetDomain(strings.Split(g.Host, ":")[0])
+	g.sec.SetDomain(domain)
 
 	g.tpkt.SetFastPathListener(g.pdu)
 	g.pdu.SetFastPathSender(g.tpkt)
+
+	g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
 
 	err = g.x224.Connect()
 	if err != nil {

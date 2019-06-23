@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/emission"
 	"github.com/icodeface/grdp/glog"
@@ -40,13 +41,12 @@ const (
 /**
  * Protocols available for x224 layer
  */
-type Protocol uint32
 
 const (
-	PROTOCOL_RDP       Protocol = 0x00000000
-	PROTOCOL_SSL                = 0x00000001
-	PROTOCOL_HYBRID             = 0x00000002
-	PROTOCOL_HYBRID_EX          = 0x00000008
+	PROTOCOL_RDP       uint32 = 0x00000000
+	PROTOCOL_SSL              = 0x00000001
+	PROTOCOL_HYBRID           = 0x00000002
+	PROTOCOL_HYBRID_EX        = 0x00000008
 )
 
 /**
@@ -65,7 +65,7 @@ type Negotiation struct {
 }
 
 func NewNegotiation() *Negotiation {
-	return &Negotiation{0, 0, 0x0008 /*constant*/, uint32(PROTOCOL_RDP)}
+	return &Negotiation{0, 0, 0x0008 /*constant*/, PROTOCOL_RDP}
 }
 
 /**
@@ -141,8 +141,8 @@ func NewDataHeader() *DataHeader {
 type X224 struct {
 	emission.Emitter
 	transport         core.Transport
-	requestedProtocol Protocol
-	selectedProtocol  Protocol
+	requestedProtocol uint32
+	selectedProtocol  uint32
 	dataHeader        *DataHeader
 }
 
@@ -150,7 +150,7 @@ func New(t core.Transport) *X224 {
 	x := &X224{
 		*emission.NewEmitter(),
 		t,
-		PROTOCOL_SSL,
+		PROTOCOL_SSL | PROTOCOL_HYBRID,
 		PROTOCOL_SSL,
 		NewDataHeader(),
 	}
@@ -183,6 +183,10 @@ func (x *X224) Close() error {
 	return x.transport.Close()
 }
 
+func (x *X224) SetRequestedProtocol(p uint32) {
+	x.requestedProtocol = p
+}
+
 func (x *X224) Connect() error {
 	if x.transport == nil {
 		return errors.New("no transport")
@@ -206,35 +210,48 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 	}
 
 	if message.ProtocolNeg.Type == TYPE_RDP_NEG_FAILURE {
-		glog.Error("NODE_RDP_PROTOCOL_NEG_FAILURE")
+		glog.Error(fmt.Sprintf("NODE_RDP_PROTOCOL_X224_NEG_FAILURE with code: %d,see https://msdn.microsoft.com/en-us/library/cc240507.aspx",
+			message.ProtocolNeg.Result))
 		return
 	}
 
 	if message.ProtocolNeg.Type == TYPE_RDP_NEG_RSP {
 		glog.Info("TYPE_RDP_NEG_RSP")
-		x.selectedProtocol = Protocol(message.ProtocolNeg.Result)
+		x.selectedProtocol = message.ProtocolNeg.Result
 	}
 
-	if x.selectedProtocol == PROTOCOL_HYBRID || x.selectedProtocol == PROTOCOL_HYBRID_EX {
-		glog.Error("NODE_RDP_PROTOCOL_NLA_NOT_SUPPORTED")
-		return
-	}
-
-	if x.selectedProtocol == PROTOCOL_RDP {
-		glog.Info("RDP standard security selected")
+	if x.selectedProtocol == PROTOCOL_HYBRID_EX {
+		glog.Error("NODE_RDP_PROTOCOL_HYBRID_EX_NOT_SUPPORTED")
 		return
 	}
 
 	x.transport.On("data", x.recvData)
 
+	if x.selectedProtocol == PROTOCOL_RDP {
+		glog.Info("*** RDP security selected ***")
+		return
+	}
+
 	if x.selectedProtocol == PROTOCOL_SSL {
-		glog.Info("SSL standard security selected")
+		glog.Info("*** SSL security selected ***")
 		err := x.transport.(*tpkt.TPKT).Conn.StartTLS()
 		if err != nil {
 			glog.Error("start tls failed", err)
 			return
 		}
 		x.Emit("connect", x.selectedProtocol)
+		return
+	}
+
+	if x.selectedProtocol == PROTOCOL_HYBRID {
+		glog.Info("*** NLA Security selected ***")
+		err := x.transport.(*tpkt.TPKT).Conn.StartNLA()
+		if err != nil {
+			glog.Error("start NLA failed", err)
+			return
+		}
+		x.Emit("connect", x.selectedProtocol)
+		return
 	}
 }
 
