@@ -1,5 +1,10 @@
 package nla
 
+import (
+	"bytes"
+	"github.com/lunixbochs/struc"
+)
+
 const (
 	NTLMSSP_NEGOTIATE_56                       = 0x80000000
 	NTLMSSP_NEGOTIATE_KEY_EXCH                 = 0x40000000
@@ -34,16 +39,33 @@ type NVersion struct {
 
 type NegotiateMessage struct {
 	Signature               [8]byte
-	MessageType             uint32
-	NegotiateFlags          uint32
-	DomainNameLen           uint16
-	DomainNameMaxLen        uint16
-	DomainNameBufferOffset  uint32
-	WorkstationLen          uint16
-	WorkstationMaxLen       uint16
-	WorkstationBufferOffset uint32
+	MessageType             uint32 `struc:"little"`
+	NegotiateFlags          uint32 `struc:"little"`
+	DomainNameLen           uint16 `struc:"little"`
+	DomainNameMaxLen        uint16 `struc:"little"`
+	DomainNameBufferOffset  uint32 `struc:"little"`
+	WorkstationLen          uint16 `struc:"little"`
+	WorkstationMaxLen       uint16 `struc:"little"`
+	WorkstationBufferOffset uint32 `struc:"little"`
 	Varsion                 NVersion
 	Payload                 string
+}
+
+func NewNegotiateMessage() *NegotiateMessage {
+	return &NegotiateMessage{
+		Signature:   [8]byte{'N', 'T', 'L', 'M', 'S', 'S', 'P', 0x00},
+		MessageType: 0x00000001,
+	}
+}
+
+func (m *NegotiateMessage) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	struc.Pack(buff, m)
+	res := buff.Bytes()
+	if (m.NegotiateFlags & NTLMSSP_NEGOTIATE_VERSION) <= 0 {
+		res = append(res[0:32], res[40:]...)
+	}
+	return res
 }
 
 type ChallengeMessage struct {
@@ -108,17 +130,17 @@ func NewNTLMv2(domain, user, password string) *NTLMv2 {
 
 // generate first handshake messgae
 func (n *NTLMv2) GetNegotiateMessage() *NegotiateMessage {
-	n.negotiateMessage = &NegotiateMessage{
-		NegotiateFlags: NTLMSSP_NEGOTIATE_KEY_EXCH |
-			NTLMSSP_NEGOTIATE_128 |
-			NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY |
-			NTLMSSP_NEGOTIATE_ALWAYS_SIGN |
-			NTLMSSP_NEGOTIATE_NTLM |
-			NTLMSSP_NEGOTIATE_SEAL |
-			NTLMSSP_NEGOTIATE_SIGN |
-			NTLMSSP_REQUEST_TARGET |
-			NTLMSSP_NEGOTIATE_UNICODE,
-	}
+	negoMsg := NewNegotiateMessage()
+	negoMsg.NegotiateFlags = NTLMSSP_NEGOTIATE_KEY_EXCH |
+		NTLMSSP_NEGOTIATE_128 |
+		NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY |
+		NTLMSSP_NEGOTIATE_ALWAYS_SIGN |
+		NTLMSSP_NEGOTIATE_NTLM |
+		NTLMSSP_NEGOTIATE_SEAL |
+		NTLMSSP_NEGOTIATE_SIGN |
+		NTLMSSP_REQUEST_TARGET |
+		NTLMSSP_NEGOTIATE_UNICODE
+	n.negotiateMessage = negoMsg
 	return n.negotiateMessage
 }
 
