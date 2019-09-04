@@ -1,2 +1,6 @@
+github.com/icodeface/tls v0.0.0-20190904081526-e03692abd1c9 h1:GQupZCLP/Co5jVtI6rdwfgrPE7DOUGvQMrDm2uI4xko=
+github.com/icodeface/tls v0.0.0-20190904081526-e03692abd1c9/go.mod h1:VJNHW2GxCtQP/IQtXykBIPBV8maPJ/dHWirVTwm9GwY=
+github.com/icodeface/tls v0.0.0-20190904082144-a3e1fe30543e h1:3V+yaobzgt0CfQTbMoTEwDY5qbvrVnRgr96JBZ00Vhw=
+github.com/icodeface/tls v0.0.0-20190904082144-a3e1fe30543e/go.mod h1:VJNHW2GxCtQP/IQtXykBIPBV8maPJ/dHWirVTwm9GwY=
 github.com/lunixbochs/struc v0.0.0-20190326164542-a9e4041416c2 h1:xvBq0/ARZLqmB57m6jds017I+KtXPcsKBHv6dUUac4A=
 github.com/lunixbochs/struc v0.0.0-20190326164542-a9e4041416c2/go.mod h1:iOJu9pApjjmEmNq7PqlA5R9mDu/HMF5EM3llWKX/TyA=
