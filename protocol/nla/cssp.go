@@ -1,23 +1,20 @@
 package nla
 
 import (
-	"bytes"
-	"encoding/hex"
+	"encoding/asn1"
 	"fmt"
 )
 
-type NegoToken []byte
-
-type NegoData struct {
-	Tokens []NegoToken
+type NegoToken struct {
+	Data []byte `asn1:"explicit,tag:0"`
 }
 
 type TSRequest struct {
-	Version    int
-	NegoTokens *NegoData
-	AuthInfo   string
-	PubKeyAuth string
-	ErrorCode  int
+	Version    int         `asn1:"explicit,tag:0"`
+	NegoTokens []NegoToken `asn1:"optional,explicit,tag:1"`
+	AuthInfo   string      `asn1:"optional,explicit,tag:2"`
+	PubKeyAuth string      `asn1:"optional,explicit,tag:3"`
+	ErrorCode  int         `asn1:"optional,explicit,tag:4"`
 }
 
 type TSCredentials struct {
@@ -36,23 +33,14 @@ type OpenSSLRSAPublicKey struct {
 }
 
 func EncodeDERTRequest(negoMsgs []*NegotiateMessage, authInfo string, pubKeyAuth string) []byte {
-	buff := bytes.Buffer{}
-
-	req := &TSRequest{
-		Version: 2,
+	req := TSRequest{
+		Version:    2,
+		NegoTokens: make([]NegoToken, 0),
 	}
 
-	negoData := &NegoData{
-		Tokens: make([]NegoToken, 0),
-	}
 	for _, msg := range negoMsgs {
-		fmt.Println(hex.EncodeToString(msg.Serialize()))
-		token := NegoToken(msg.Serialize())
-		negoData.Tokens = append(negoData.Tokens, token)
-	}
-
-	if len(negoMsgs) > 0 {
-		req.NegoTokens = negoData
+		token := NegoToken{msg.Serialize()}
+		req.NegoTokens = append(req.NegoTokens, token)
 	}
 
 	if len(authInfo) > 0 {
@@ -63,15 +51,14 @@ func EncodeDERTRequest(negoMsgs []*NegotiateMessage, authInfo string, pubKeyAuth
 		// todo
 	}
 
-	fmt.Println(req)
-	return buff.Bytes()
-
-	//
-	// 302fa003020102a12830263024a0220420
-	// tokens:
-	// 4e544c4d53535000010000003582086000000000000000000000000000000000
+	bb, err := asn1.Marshal(req)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return bb
 }
 
 func DecodeDERTRequest(s []byte) (*TSRequest, error) {
+	fmt.Println("todo DecodeDERTRequest")
 	return nil, nil
 }
