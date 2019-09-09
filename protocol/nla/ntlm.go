@@ -253,8 +253,32 @@ func (n *NTLMv2) GetNegotiateMessage() *NegotiateMessage {
 }
 
 //  process NTLMv2 Authenticate hash
-func (n *NTLMv2) ComputeResponse(respKeyNT, respKeyLM, serverChallenge, clientChallenge, Time, ServerName []byte) {
-	// todo
+func (n *NTLMv2) ComputeResponse(respKeyNT, respKeyLM, serverChallenge, clientChallenge,
+	timestamp, serverName []byte) (ntChallResp, lmChallResp, SessBaseKey []byte) {
+
+	tempBuff := &bytes.Buffer{}
+	tempBuff.Write([]byte{0x01, 0x01}) // Responser version, HiResponser version
+	tempBuff.Write([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	tempBuff.Write(timestamp)
+	tempBuff.Write(clientChallenge)
+	tempBuff.Write([]byte{0x00, 0x00, 0x00, 0x00})
+	tempBuff.Write(serverName)
+
+	ntBuf := bytes.NewBuffer(serverChallenge)
+	ntBuf.Write(tempBuff.Bytes())
+	ntProof := HMAC_MD5(respKeyNT, ntBuf.Bytes())
+
+	ntChallResp = make([]byte, 0, len(ntProof)+tempBuff.Len())
+	ntChallResp = append(ntChallResp, ntProof...)
+	ntChallResp = append(ntChallResp, tempBuff.Bytes()...)
+
+	lmBuf := bytes.NewBuffer(serverChallenge)
+	lmBuf.Write(clientChallenge)
+	lmChallResp = HMAC_MD5(respKeyLM, lmBuf.Bytes())
+	lmChallResp = append(lmChallResp, clientChallenge...)
+
+	SessBaseKey = HMAC_MD5(respKeyNT, ntProof)
+	return
 }
 
 func (n *NTLMv2) GetAuthenticateMessage(s []byte) *AuthenticateMessage {
