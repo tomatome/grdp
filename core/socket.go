@@ -67,11 +67,10 @@ func (s *SocketLayer) StartNLA() error {
 		glog.Info("start tls failed", err)
 		return err
 	}
-
-	req := nla.EncodeDERTRequest([]*nla.NegotiateMessage{s.ntlm.GetNegotiateMessage()}, "", "")
+	req := nla.EncodeDERTRequest([]nla.Message{s.ntlm.GetNegotiateMessage()}, "", "")
 	_, err = s.Write(req)
 	if err != nil {
-		glog.Info("err send DERTRequest", err)
+		glog.Info("send NegotiateMessage", err)
 		return err
 	}
 
@@ -85,19 +84,33 @@ func (s *SocketLayer) StartNLA() error {
 
 func (s *SocketLayer) recvChallenge(data []byte) error {
 	glog.Debug("recvChallenge", hex.EncodeToString(data))
-	resp, err := nla.DecodeDERTRequest(data)
+	tsreq, err := nla.DecodeDERTRequest(data)
 	if err != nil {
 		return err
 	}
-	fmt.Println(resp)
-	// todo
 
-	resp := make([]byte, 1024)
-	_, err = s.Read(resp)
+	// get pubkey
+
+	pubkey := ""
+
+	msg := s.ntlm.GetAuthenticateMessage(tsreq.NegoTokens[0].Data)
+	req := nla.EncodeDERTRequest([]nla.Message{msg}, "", pubkey)
+	_, err = s.Write(req)
 	if err != nil {
+		glog.Info("send AuthenticateMessage", err)
 		return err
 	}
-	return s.recvPubKeyInc(resp)
+
+	//resp := make([]byte, 1024)
+	//_, err = s.Read(resp)
+	//if err != nil {
+	//	return err
+	//}
+	//return s.recvPubKeyInc(resp)
+
+	fmt.Println("todo")
+	return nil
+
 }
 
 func (s *SocketLayer) recvPubKeyInc(data []byte) error {

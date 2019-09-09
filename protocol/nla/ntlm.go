@@ -2,8 +2,32 @@ package nla
 
 import (
 	"bytes"
+	"crypto/rand"
+	"fmt"
+	"github.com/icodeface/grdp/glog"
 	"github.com/lunixbochs/struc"
+	"os"
 )
+
+const (
+	MsvAvEOL             = 0x0000
+	MsvAvNbComputerName  = 0x0001
+	MsvAvNbDomainName    = 0x0002
+	MsvAvDnsComputerName = 0x0003
+	MsvAvDnsDomainName   = 0x0004
+	MsvAvDnsTreeName     = 0x0005
+	MsvAvFlags           = 0x0006
+	MsvAvTimestamp       = 0x0007
+	MsvAvSingleHost      = 0x0008
+	MsvAvTargetName      = 0x0009
+	MsvChannelBindings   = 0x000A
+)
+
+type AVPair struct {
+	Id    uint16 `struc:"little"`
+	Len   uint16 `struc:"little,sizeof=Value"`
+	Value []byte
+}
 
 const (
 	NTLMSSP_NEGOTIATE_56                       = 0x80000000
@@ -32,9 +56,13 @@ const (
 type NVersion struct {
 	ProductMajorVersion uint8
 	ProductMinorVersion uint8
-	ProductBuild        uint16
+	ProductBuild        uint16 `struc:"little"`
 	Reserved            [3]byte
 	UInt8               uint8
+}
+
+type Message interface {
+	Serialize() []byte
 }
 
 type NegotiateMessage struct {
@@ -48,7 +76,7 @@ type NegotiateMessage struct {
 	WorkstationMaxLen       uint16 `struc:"little"`
 	WorkstationBufferOffset uint32 `struc:"little"`
 	Varsion                 NVersion
-	Payload                 string
+	Payload                 []byte `struc:"skip"`
 }
 
 func NewNegotiateMessage() *NegotiateMessage {
@@ -70,51 +98,129 @@ func (m *NegotiateMessage) Serialize() []byte {
 
 type ChallengeMessage struct {
 	Signature              [8]byte
-	MessageType            uint32
-	TargetNameLen          uint16
-	TargetNameMaxLen       uint16
-	TargetNameBufferOffset uint32
-	NegotiateFlags         uint32
+	MessageType            uint32 `struc:"little"`
+	TargetNameLen          uint16 `struc:"little"`
+	TargetNameMaxLen       uint16 `struc:"little"`
+	TargetNameBufferOffset uint32 `struc:"little"`
+	NegotiateFlags         uint32 `struc:"little"`
 	ServerChallenge        [8]byte
 	Reserved               [8]byte
-	TargetInfoLen          uint16
-	TargetInfoMaxLen       uint16
-	TargetInfoBufferOffset uint32
+	TargetInfoLen          uint16 `struc:"little"`
+	TargetInfoMaxLen       uint16 `struc:"little"`
+	TargetInfoBufferOffset uint32 `struc:"little"`
 	Version                NVersion
-	Payload                string
+	Payload                []byte `struc:"skip"`
+}
+
+// total len - payload len
+func (m *ChallengeMessage) BaseLen() uint32 {
+	return 56
+}
+
+func (m *ChallengeMessage) getTargetInfo() []byte {
+	if m.TargetInfoLen == 0 {
+		return make([]byte, 0)
+	}
+	offset := m.BaseLen()
+	start := m.TargetInfoBufferOffset - offset
+	return m.Payload[start : start+uint32(m.TargetInfoLen)]
+}
+
+func NewChallengeMessage() *ChallengeMessage {
+	return &ChallengeMessage{
+		Signature:   [8]byte{'N', 'T', 'L', 'M', 'S', 'S', 'P', 0x00},
+		MessageType: 0x00000002,
+	}
 }
 
 type AuthenticateMessage struct {
 	Signature                          [8]byte
-	MessageType                        uint32
-	LmChallengeResponseLen             uint16
-	LmChallengeResponseMaxLen          uint16
-	LmChallengeResponseBufferOffset    uint32
-	NtChallengeResponseLen             uint16
-	NtChallengeResponseMaxLen          uint16
-	NtChallengeResponseBufferOffset    uint32
-	DomainNameLen                      uint16
-	DomainNameMaxLen                   uint16
-	DomainNameBufferOffset             uint32
-	UserNameLen                        uint16
-	UserNameMaxLen                     uint16
-	UserNameBufferOffset               uint32
-	WorkstationLen                     uint16
-	WorkstationMaxLen                  uint16
-	WorkstationBufferOffset            uint32
-	EncryptedRandomSessionLen          uint16
-	EncryptedRandomSessionMaxLen       uint16
-	EncryptedRandomSessionBufferOffset uint16
-	NegotiateFlags                     uint32
+	MessageType                        uint32 `struc:"little"`
+	LmChallengeResponseLen             uint16 `struc:"little"`
+	LmChallengeResponseMaxLen          uint16 `struc:"little"`
+	LmChallengeResponseBufferOffset    uint32 `struc:"little"`
+	NtChallengeResponseLen             uint16 `struc:"little"`
+	NtChallengeResponseMaxLen          uint16 `struc:"little"`
+	NtChallengeResponseBufferOffset    uint32 `struc:"little"`
+	DomainNameLen                      uint16 `struc:"little"`
+	DomainNameMaxLen                   uint16 `struc:"little"`
+	DomainNameBufferOffset             uint32 `struc:"little"`
+	UserNameLen                        uint16 `struc:"little"`
+	UserNameMaxLen                     uint16 `struc:"little"`
+	UserNameBufferOffset               uint32 `struc:"little"`
+	WorkstationLen                     uint16 `struc:"little"`
+	WorkstationMaxLen                  uint16 `struc:"little"`
+	WorkstationBufferOffset            uint32 `struc:"little"`
+	EncryptedRandomSessionLen          uint16 `struc:"little"`
+	EncryptedRandomSessionMaxLen       uint16 `struc:"little"`
+	EncryptedRandomSessionBufferOffset uint32 `struc:"little"`
+	NegotiateFlags                     uint32 `struc:"little"`
 	Version                            NVersion
 	MIC                                [16]byte
-	Payload                            string
+	Payload                            []byte `struc:"skip"`
+}
+
+func (m *AuthenticateMessage) BaseLen() uint32 {
+	return 88
+}
+
+func NewAuthenticateMessage(negFlag uint32, domain, user, workstation string,
+	lmchallResp, ntchallResp, enRandomSessKey []byte) *AuthenticateMessage {
+	msg := &AuthenticateMessage{
+		Signature:      [8]byte{'N', 'T', 'L', 'M', 'S', 'S', 'P', 0x00},
+		MessageType:    0x00000003,
+		NegotiateFlags: negFlag,
+	}
+	payloadBuff := &bytes.Buffer{}
+
+	domainBytes := UnicodeEncode(domain)
+	msg.DomainNameLen = uint16(len(domainBytes))
+	msg.DomainNameBufferOffset = msg.BaseLen()
+	payloadBuff.Write(domainBytes)
+
+	userBytes := UnicodeEncode(user)
+	msg.UserNameLen = uint16(len(userBytes))
+	msg.UserNameBufferOffset = msg.DomainNameBufferOffset + uint32(msg.DomainNameLen)
+	payloadBuff.Write(userBytes)
+
+	wsBytes := UnicodeEncode(workstation)
+	msg.WorkstationLen = uint16(len(wsBytes))
+	msg.WorkstationBufferOffset = msg.UserNameBufferOffset + uint32(msg.UserNameLen)
+	payloadBuff.Write(wsBytes)
+
+	msg.LmChallengeResponseLen = uint16(len(lmchallResp))
+	msg.LmChallengeResponseBufferOffset = msg.WorkstationBufferOffset + uint32(msg.WorkstationLen)
+	payloadBuff.Write(lmchallResp)
+
+	msg.NtChallengeResponseLen = uint16(len(ntchallResp))
+	msg.NtChallengeResponseBufferOffset = msg.LmChallengeResponseBufferOffset + uint32(msg.LmChallengeResponseLen)
+	payloadBuff.Write(ntchallResp)
+
+	msg.EncryptedRandomSessionLen = uint16(len(enRandomSessKey))
+	msg.EncryptedRandomSessionBufferOffset = msg.NtChallengeResponseBufferOffset + uint32(msg.NtChallengeResponseLen)
+	payloadBuff.Write(enRandomSessKey)
+
+	msg.Payload = payloadBuff.Bytes()
+	return msg
+}
+
+func (m *AuthenticateMessage) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	struc.Pack(buff, m)
+	res := buff.Bytes()
+	fmt.Println("todo AuthenticateMessage Serialize()")
+	//if (m.NegotiateFlags & NTLMSSP_NEGOTIATE_VERSION) <= 0 {
+	//	res = append(res[0:32], res[40:]...)
+	//}
+	return res
 }
 
 type NTLMv2 struct {
 	domain              string
 	user                string
 	password            string
+	respKeyNT           []byte
+	respKeyLM           []byte
 	negotiateMessage    *NegotiateMessage
 	challengeMessage    *ChallengeMessage
 	authenticateMessage *AuthenticateMessage
@@ -122,9 +228,11 @@ type NTLMv2 struct {
 
 func NewNTLMv2(domain, user, password string) *NTLMv2 {
 	return &NTLMv2{
-		domain:   domain,
-		user:     user,
-		password: password,
+		domain:    domain,
+		user:      user,
+		password:  password,
+		respKeyNT: NTOWFv2(password, user, domain),
+		respKeyLM: LMOWFv2(password, user, domain),
 	}
 }
 
@@ -144,8 +252,77 @@ func (n *NTLMv2) GetNegotiateMessage() *NegotiateMessage {
 	return n.negotiateMessage
 }
 
-func (n *NTLMv2) GetAuthenticateMessage() *AuthenticateMessage {
-	n.challengeMessage = &ChallengeMessage{}
+//  process NTLMv2 Authenticate hash
+func (n *NTLMv2) ComputeResponse(respKeyNT, respKeyLM, serverChallenge, clientChallenge, Time, ServerName []byte) {
 	// todo
-	return nil
+}
+
+func (n *NTLMv2) GetAuthenticateMessage(s []byte) *AuthenticateMessage {
+	challengeMsg := &ChallengeMessage{}
+	err := struc.Unpack(bytes.NewReader(s), challengeMsg)
+	if err != nil {
+		glog.Error("read challengeMsg", err)
+		return nil
+	}
+	challengeMsg.Payload = s[challengeMsg.BaseLen():]
+	n.challengeMessage = challengeMsg
+
+	serverName := challengeMsg.getTargetInfo()
+	serverChallenge := n.challengeMessage.ServerChallenge[:]
+	clientChallenge := make([]byte, 64)
+	_, err = rand.Read(clientChallenge)
+	if err != nil {
+		glog.Error("read clientChallenge", err)
+		return nil
+	}
+
+	var timestamp []byte
+	avr := bytes.NewReader(serverName)
+	for {
+		av := &AVPair{}
+		if err = struc.Unpack(avr, av); err != nil {
+			glog.Error("read av", err)
+			break
+		}
+		if av.Id == MsvAvEOL {
+			break
+		}
+		if av.Id == MsvAvTimestamp {
+			timestamp = av.Value
+			break
+		}
+	}
+	if timestamp == nil {
+		glog.Error("timestamp not found")
+		return nil
+	}
+
+	n.ComputeResponse(n.respKeyNT, n.respKeyLM, serverChallenge, clientChallenge, timestamp, serverName)
+
+	computeMIC := false
+
+	n.authenticateMessage = NewAuthenticateMessage(challengeMsg.NegotiateFlags,
+		n.domain, n.user, "", nil, nil, nil)
+
+	if computeMIC {
+		// todo
+	}
+
+	// self._authenticateMessage = createAuthenticationMessage(challengeMessage.NegotiateFlags.value,
+	// domain, user, NtChallengeResponse, LmChallengeResponse, EncryptedRandomSessionKey, "")
+
+	//jj, _ := json.Marshal(challengeMsg)
+	//fmt.Println(string(jj))
+	//
+	//fmt.Println("Payload", string(challengeMsg.Payload[:]))
+
+	os.Exit(0)
+
+	//
+	//
+	//
+	//n.authenticateMessage = NewAuthenticateMessage()
+	// todo
+
+	return n.authenticateMessage
 }

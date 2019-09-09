@@ -2,7 +2,7 @@ package nla
 
 import (
 	"encoding/asn1"
-	"fmt"
+	"github.com/icodeface/grdp/glog"
 )
 
 type NegoToken struct {
@@ -32,13 +32,13 @@ type TSSmartCardCreds struct {
 type OpenSSLRSAPublicKey struct {
 }
 
-func EncodeDERTRequest(negoMsgs []*NegotiateMessage, authInfo string, pubKeyAuth string) []byte {
+func EncodeDERTRequest(msgs []Message, authInfo string, pubKeyAuth string) []byte {
 	req := TSRequest{
 		Version:    2,
 		NegoTokens: make([]NegoToken, 0),
 	}
 
-	for _, msg := range negoMsgs {
+	for _, msg := range msgs {
 		token := NegoToken{msg.Serialize()}
 		req.NegoTokens = append(req.NegoTokens, token)
 	}
@@ -51,14 +51,15 @@ func EncodeDERTRequest(negoMsgs []*NegotiateMessage, authInfo string, pubKeyAuth
 		// todo
 	}
 
-	bb, err := asn1.Marshal(req)
+	result, err := asn1.Marshal(req)
 	if err != nil {
-		fmt.Println(err)
+		glog.Error(err)
 	}
-	return bb
+	return result
 }
 
 func DecodeDERTRequest(s []byte) (*TSRequest, error) {
-	fmt.Println("todo DecodeDERTRequest")
-	return nil, nil
+	treq := &TSRequest{}
+	_, err := asn1.Unmarshal(s, treq)
+	return treq, err
 }
