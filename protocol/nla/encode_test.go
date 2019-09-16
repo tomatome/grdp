@@ -18,5 +18,14 @@ func TestNTOWFv2(t *testing.T) {
 	if res != expected {
 		t.Error(res, "not equal to", expected)
 	}
+}
 
+func TestRC4K(t *testing.T) {
+	key, _ := hex.DecodeString("55638e834ce774c100637f197bc0683f")
+	src, _ := hex.DecodeString("177d16086dd3f06fa8d594e3bad005b7")
+	res := hex.EncodeToString(nla.RC4K(key, src))
+	expected := "f5ab375222707a492bd5a90705d96d1d"
+	if res != expected {
+		t.Error(res, "not equal to", expected)
+	}
 }

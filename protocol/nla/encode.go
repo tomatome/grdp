@@ -3,6 +3,7 @@ package nla
 import (
 	"crypto/hmac"
 	"crypto/md5"
+	"crypto/rc4"
 	"encoding/binary"
 	"golang.org/x/crypto/md4"
 	"strings"
@@ -48,4 +49,11 @@ func NTOWFv2(password, user, domain string) []byte {
 // Same as NTOWFv2
 func LMOWFv2(password, user, domain string) []byte {
 	return NTOWFv2(password, user, domain)
+}
+
+func RC4K(key, src []byte) []byte {
+	result := make([]byte, len(src))
+	rc4obj, _ := rc4.NewCipher(key)
+	rc4obj.XORKeyStream(result, src)
+	return result
 }

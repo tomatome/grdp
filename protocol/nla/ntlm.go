@@ -126,6 +126,13 @@ func (m *ChallengeMessage) getTargetInfo() []byte {
 	return m.Payload[start : start+uint32(m.TargetInfoLen)]
 }
 
+func (m *ChallengeMessage) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	struc.Pack(buff, m)
+	buff.Write(m.Payload)
+	return buff.Bytes()
+}
+
 func NewChallengeMessage() *ChallengeMessage {
 	return &ChallengeMessage{
 		Signature:   [8]byte{'N', 'T', 'L', 'M', 'S', 'S', 'P', 0x00},
@@ -207,11 +214,8 @@ func NewAuthenticateMessage(negFlag uint32, domain, user, workstation string,
 func (m *AuthenticateMessage) Serialize() []byte {
 	buff := &bytes.Buffer{}
 	struc.Pack(buff, m)
+	buff.Write(m.Payload)
 	res := buff.Bytes()
-	fmt.Println("todo AuthenticateMessage Serialize()")
-	//if (m.NegotiateFlags & NTLMSSP_NEGOTIATE_VERSION) <= 0 {
-	//	res = append(res[0:32], res[40:]...)
-	//}
 	return res
 }
 
@@ -281,6 +285,24 @@ func (n *NTLMv2) ComputeResponse(respKeyNT, respKeyLM, serverChallenge, clientCh
 	return
 }
 
+func MIC(exportedSessionKey []byte, negotiateMessage, challengeMessage, authenticateMessage Message) []byte {
+	buff := bytes.Buffer{}
+	buff.Write(negotiateMessage.Serialize())
+	buff.Write(challengeMessage.Serialize())
+	buff.Write(authenticateMessage.Serialize())
+	return HMAC_MD5(exportedSessionKey, buff.Bytes())
+}
+
+func SIGNKEY(exportedSessionKey []byte, isClient bool) []byte {
+	buff := bytes.NewBuffer(exportedSessionKey)
+	if isClient {
+		buff.WriteString("session key to client-to-server signing key magic constant\x00")
+	} else {
+		buff.WriteString("session key to server-to-client signing key magic constant\x00")
+	}
+	return MD5(buff.Bytes())
+}
+
 func (n *NTLMv2) GetAuthenticateMessage(s []byte) *AuthenticateMessage {
 	challengeMsg := &ChallengeMessage{}
 	err := struc.Unpack(bytes.NewReader(s), challengeMsg)
@@ -300,6 +322,7 @@ func (n *NTLMv2) GetAuthenticateMessage(s []byte) *AuthenticateMessage {
 		return nil
 	}
 
+	computeMIC := false
 	var timestamp []byte
 	avr := bytes.NewReader(serverName)
 	for {
@@ -313,23 +336,26 @@ func (n *NTLMv2) GetAuthenticateMessage(s []byte) *AuthenticateMessage {
 		}
 		if av.Id == MsvAvTimestamp {
 			timestamp = av.Value
+			computeMIC = true
 			break
 		}
 	}
 	if timestamp == nil {
-		glog.Error("timestamp not found")
+		glog.Error("todo timestamp not found")
 		return nil
 	}
 
-	n.ComputeResponse(n.respKeyNT, n.respKeyLM, serverChallenge, clientChallenge, timestamp, serverName)
-
-	computeMIC := false
+	ntChallengeResponse, lmChallengeResponse, keyExchangeKey := n.ComputeResponse(
+		n.respKeyNT, n.respKeyLM, serverChallenge, clientChallenge, timestamp, serverName)
+	exportedSessionKey := make([]byte, 128)
+	rand.Read(exportedSessionKey)
+	encryptedRandomSessionKey := RC4K(keyExchangeKey, exportedSessionKey)
 
 	n.authenticateMessage = NewAuthenticateMessage(challengeMsg.NegotiateFlags,
 		n.domain, n.user, "", nil, nil, nil)
 
 	if computeMIC {
-		// todo
+		copy(n.authenticateMessage.MIC[:], MIC(exportedSessionKey, n.negotiateMessage, n.challengeMessage, n.authenticateMessage)[:16])
 	}
 
 	// self._authenticateMessage = createAuthenticationMessage(challengeMessage.NegotiateFlags.value,

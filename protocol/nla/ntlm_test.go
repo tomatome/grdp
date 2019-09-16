@@ -50,3 +50,12 @@ func TestNTLMv2_ComputeResponse(t *testing.T) {
 		t.Error("SessionBaseKey incorrect")
 	}
 }
+
+func TestSIGNKEY(t *testing.T) {
+	exportedSessionKey, _ := hex.DecodeString("be32c3c56ea6683200a35329d67880c3")
+	result := hex.EncodeToString(nla.SIGNKEY(exportedSessionKey, true))
+	expected := "79b4f9a4113230f378a0af99f784adae"
+	if result != expected {
+		t.Error(result, "not equal to", expected)
+	}
+}
