@@ -3,7 +3,6 @@ package nla
 import (
 	"bytes"
 	"crypto/rand"
-	"fmt"
 	"github.com/icodeface/grdp/glog"
 	"github.com/lunixbochs/struc"
 	"os"
