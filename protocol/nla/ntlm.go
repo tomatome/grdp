@@ -313,7 +313,7 @@ func (n *NTLMv2) GetAuthenticateMessage(s []byte) *AuthenticateMessage {
 	n.challengeMessage = challengeMsg
 
 	serverName := challengeMsg.getTargetInfo()
-	serverChallenge := n.challengeMessage.ServerChallenge[:]
+	//serverChallenge := n.challengeMessage.ServerChallenge[:]
 	clientChallenge := make([]byte, 64)
 	_, err = rand.Read(clientChallenge)
 	if err != nil {
@@ -344,11 +344,11 @@ func (n *NTLMv2) GetAuthenticateMessage(s []byte) *AuthenticateMessage {
 		return nil
 	}
 
-	ntChallengeResponse, lmChallengeResponse, keyExchangeKey := n.ComputeResponse(
-		n.respKeyNT, n.respKeyLM, serverChallenge, clientChallenge, timestamp, serverName)
+	//ntChallengeResponse, lmChallengeResponse, keyExchangeKey := n.ComputeResponse(
+	//	n.respKeyNT, n.respKeyLM, serverChallenge, clientChallenge, timestamp, serverName)
 	exportedSessionKey := make([]byte, 128)
 	rand.Read(exportedSessionKey)
-	encryptedRandomSessionKey := RC4K(keyExchangeKey, exportedSessionKey)
+	//encryptedRandomSessionKey := RC4K(keyExchangeKey, exportedSessionKey)
 
 	n.authenticateMessage = NewAuthenticateMessage(challengeMsg.NegotiateFlags,
 		n.domain, n.user, "", nil, nil, nil)
