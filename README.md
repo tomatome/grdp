@@ -21,6 +21,11 @@ if err != nil {
     fmt.Println("login success")
 }
 ```
+or
+```
+on windows:
+启动example.exe, 浏览器访问8088端口。
+```
 
 ## Take ideas from
 
