@@ -1,8 +1,9 @@
 package lic
 
 import (
-	"github.com/icodeface/grdp/core"
 	"io"
+
+	"github.com/icodeface/grdp/core"
 )
 
 const (
@@ -70,4 +71,51 @@ func ReadLicensePacket(r io.Reader) *LicensePacket {
 		l.LicensingMessage, _ = core.ReadBytes(int(l.WMsgSize-4), r)
 	}
 	return l
+}
+
+/*
+@summary:  Send by server to signal license request
+            server -> client
+@see: http://msdn.microsoft.com/en-us/library/cc241914.aspx
+*/
+type ServerLicenseRequest struct {
+	/*ServerRandom []byte
+	  ProductInfo = ProductInformation()
+	  KeyExchangeList = LicenseBinaryBlob(BinaryBlobType.BB_KEY_EXCHG_ALG_BLOB)
+	  ServerCertificate = LicenseBinaryBlob(BinaryBlobType.BB_CERTIFICATE_BLOB)
+	  ScopeList = ScopeList()*/
+}
+
+/*
+@summary:  Send by client to ask new license for client.
+            RDPY doesn'support license reuse, need it in futur version
+@see: http://msdn.microsoft.com/en-us/library/cc241918.aspx
+ 	#RSA and must be only RSA
+    #pure microsoft client ;-)
+    #http://msdn.microsoft.com/en-us/library/1040af38-c733-4fb3-acd1-8db8cc979eda#id10
+*/
+type ClientNewLicenseRequest struct {
+	/*PreferredKeyExchangeAlg uint32
+
+	  PlatformId uint32
+	  ClientRandom []byte
+	  EncryptedPreMasterSecret = LicenseBinaryBlob(BinaryBlobType.BB_RANDOM_BLOB)
+	  ClientUserName = LicenseBinaryBlob(BinaryBlobType.BB_CLIENT_USER_NAME_BLOB)
+	  ClientMachineName = LicenseBinaryBlob(BinaryBlobType.BB_CLIENT_MACHINE_NAME_BLOB)*/
+}
+
+/*
+@summary: challenge send from server to client
+@see: http://msdn.microsoft.com/en-us/library/cc241921.aspx
+*/
+type ServerPlatformChallenge struct {
+
+	/*ConnectFlags uint32
+	  EncryptedPlatformChallenge = LicenseBinaryBlob(BinaryBlobType.BB_ANY_BLOB)
+	  MACData [16]byte*/
+}
+
+func (l *LicensePacket) Serialize() []byte {
+	//todo
+	return nil
 }

@@ -5,13 +5,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"reflect"
+
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/emission"
 	"github.com/icodeface/grdp/glog"
 	"github.com/icodeface/grdp/protocol/t125/ber"
 	"github.com/icodeface/grdp/protocol/t125/gcc"
 	"github.com/icodeface/grdp/protocol/t125/per"
-	"io"
 )
 
 // take idea from https://github.com/Madnikulin50/gordp
@@ -249,8 +251,9 @@ type MCSClient struct {
 	serverNetworkData  *gcc.ServerNetworkData
 	serverSecurityData *gcc.ServerSecurityData
 
-	channelsConnected int
-	userId            uint16
+	channelsConnected  int
+	userId             uint16
+	nbChannelRequested int
 }
 
 func NewMCSClient(t core.Transport) *MCSClient {
@@ -259,9 +262,15 @@ func NewMCSClient(t core.Transport) *MCSClient {
 		clientCoreData:     gcc.NewClientCoreData(),
 		clientNetworkData:  gcc.NewClientNetworkData(),
 		clientSecurityData: gcc.NewClientSecurityData(),
+		userId:             1 + MCS_USERCHANNEL_BASE,
 	}
 	c.transport.On("connect", c.connect)
 	return c
+}
+
+func (c *MCSClient) SetClientCoreData(width, height uint16) {
+	c.clientCoreData.DesktopWidth = width
+	c.clientCoreData.DesktopHeight = height
 }
 
 func (c *MCSClient) connect(selectedProtocol uint32) {
@@ -298,31 +307,29 @@ func (c *MCSClient) recvConnectResponse(s []byte) {
 		c.Emit("error", errors.New(fmt.Sprintf("ReadConnectResponse %v", err)))
 		return
 	}
-
 	// record server gcc block
 	serverSettings := gcc.ReadConferenceCreateResponse(cResp.userData)
 	for _, v := range serverSettings {
 		switch v.(type) {
-		case gcc.ServerSecurityData:
-			{
-				c.serverSecurityData = v.(*gcc.ServerSecurityData)
-			}
-		case gcc.ServerCoreData:
-			{
-				c.serverCoreData = v.(*gcc.ServerCoreData)
-			}
-		case gcc.ServerNetworkData:
-			{
-				c.serverNetworkData = v.(*gcc.ServerNetworkData)
-			}
+		case *gcc.ServerSecurityData:
+			c.serverSecurityData = v.(*gcc.ServerSecurityData)
+
+		case *gcc.ServerCoreData:
+			c.serverCoreData = v.(*gcc.ServerCoreData)
+
+		case *gcc.ServerNetworkData:
+			c.serverNetworkData = v.(*gcc.ServerNetworkData)
+
 		default:
-			err := errors.New(fmt.Sprintf("unhandle server gcc block %v %v", v, cResp.userData))
+			err := errors.New(fmt.Sprintf("unhandle server gcc block %v", reflect.TypeOf(v)))
 			glog.Error(err)
 			c.Emit("error", err)
 			return
 		}
 	}
-
+	glog.Infof("serverSecurityData: %+v", c.serverSecurityData)
+	glog.Infof("serverCoreData: %+v", c.serverCoreData)
+	glog.Infof("serverNetworkData: %+v", c.serverNetworkData)
 	glog.Debug("mcs sendErectDomainRequest")
 	c.sendErectDomainRequest()
 
@@ -380,8 +387,15 @@ func (c *MCSClient) recvAttachUserConfirm(s []byte) {
 }
 
 func (c *MCSClient) connectChannels() {
-	glog.Debug("mcs connectChannels")
+	glog.Debug("mcs connectChannels:", c.channelsConnected, ":", len(c.channels))
 	if c.channelsConnected == len(c.channels) {
+		//if c.nbChannelRequested < int(c.serverNetworkData.ChannelCount) {
+		//static virtual channel
+		//chanId := c.serverNetworkData.ChannelIdArray[c.nbChannelRequested]
+		//c.nbChannelRequested++
+		//c.sendChannelJoinRequest(chanId)
+		//return
+		//}
 		c.transport.On("data", c.recvData)
 		// send client and sever gcc informations callback to sec
 		clientData := make([]interface{}, 0)
@@ -398,13 +412,14 @@ func (c *MCSClient) connectChannels() {
 	}
 
 	// sendChannelJoinRequest
+	glog.Debug("sendChannelJoinRequest:", c.channels[c.channelsConnected].Name)
 	c.sendChannelJoinRequest(c.channels[c.channelsConnected].ID)
 	c.channelsConnected += 1
 	c.transport.Once("data", c.recvChannelJoinConfirm)
 }
 
 func (c *MCSClient) sendChannelJoinRequest(channelId uint16) {
-	glog.Debug("mcs sendChannelJoinRequest")
+	glog.Debug("mcs sendChannelJoinRequest", channelId)
 	buff := &bytes.Buffer{}
 	writeMCSPDUHeader(CHANNEL_JOIN_REQUEST, 0, buff)
 	per.WriteInteger16(c.userId-MCS_USERCHANNEL_BASE, buff)
@@ -413,7 +428,7 @@ func (c *MCSClient) sendChannelJoinRequest(channelId uint16) {
 }
 
 func (c *MCSClient) recvData(s []byte) {
-	glog.Debug("msc on data recvData")
+	glog.Debug("msc on data recvData:", hex.EncodeToString(s))
 
 	r := bytes.NewReader(s)
 	option, err := core.ReadUInt8(r)
@@ -458,8 +473,9 @@ func (c *MCSClient) recvData(s []byte) {
 		c.Emit("error", errors.New(fmt.Sprintf("mcs recvData get data error %v", err)))
 		return
 	}
-	glog.Debug("mcs emit channel", channelName)
+	glog.Debug("mcs emit channel", channelName, left)
 	c.Emit(channelName, left)
+	//c.Emit(channelName, s)
 }
 
 func (c *MCSClient) recvChannelJoinConfirm(s []byte) {
@@ -490,16 +506,26 @@ func (c *MCSClient) recvChannelJoinConfirm(s []byte) {
 		return
 	}
 
+	//if confirm == 0 {
+	//for i := 0; i < int(c.serverNetworkData.ChannelCount); i++ {
+	//if channelId == c.serverNetworkData.ChannelIdArray[i] {
+	//c.channels[channelId] = c.[i][1]
+	//}
+	//}
+	//}
+	glog.Info("confirm:", confirm)
+
 	c.connectChannels()
 }
 
 func (c *MCSClient) Write(data []byte) (n int, err error) {
 	buff := &bytes.Buffer{}
 	writeMCSPDUHeader(c.sendOpCode, 0, buff)
-	per.WriteInteger16(c.userId+MCS_USERCHANNEL_BASE, buff)
+	per.WriteInteger16(c.userId-MCS_USERCHANNEL_BASE, buff)
 	per.WriteInteger16(c.channels[0].ID, buff)
 	core.WriteUInt8(0x70, buff)
 	per.WriteLength(len(data), buff)
 	core.WriteBytes(data, buff)
+	glog.Debug("MCSClient write", hex.EncodeToString(buff.Bytes()))
 	return c.transport.Write(buff.Bytes())
 }

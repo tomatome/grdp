@@ -5,11 +5,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/glog"
 	"github.com/icodeface/grdp/protocol/t125/gcc"
 	"github.com/lunixbochs/struc"
-	"io"
 )
 
 type CapsType uint16
@@ -191,6 +192,33 @@ type SoundFlag uint16
 const (
 	SOUND_NONE       SoundFlag = 0x0000
 	SOUND_BEEPS_FLAG           = 0x0001
+)
+
+const (
+	INPUT_EVENT_SYNC     = 0x0000
+	INPUT_EVENT_UNUSED   = 0x0002
+	INPUT_EVENT_SCANCODE = 0x0004
+	INPUT_EVENT_UNICODE  = 0x0005
+	INPUT_EVENT_MOUSE    = 0x8001
+	INPUT_EVENT_MOUSEX   = 0x8002
+)
+
+const (
+	PTRFLAGS_HWHEEL         = 0x0400
+	PTRFLAGS_WHEEL          = 0x0200
+	PTRFLAGS_WHEEL_NEGATIVE = 0x0100
+	WheelRotationMask       = 0x01FF
+	PTRFLAGS_MOVE           = 0x0800
+	PTRFLAGS_DOWN           = 0x8000
+	PTRFLAGS_BUTTON1        = 0x1000
+	PTRFLAGS_BUTTON2        = 0x2000
+	PTRFLAGS_BUTTON3        = 0x4000
+)
+
+const (
+	KBDFLAGS_EXTENDED = 0x0100
+	KBDFLAGS_DOWN     = 0x4000
+	KBDFLAGS_RELEASE  = 0x8000
 )
 
 type Capability interface {
@@ -535,12 +563,15 @@ func readCapability(r io.Reader) (Capability, error) {
 	if err != nil {
 		return nil, err
 	}
+	if int(capLen)-4 <= 0 {
+		return nil, err
+	}
+
 	capBytes, err := core.ReadBytes(int(capLen)-4, r)
 	if err != nil {
 		return nil, err
 	}
 	capReader := bytes.NewReader(capBytes)
-
 	var c Capability
 	switch CapsType(capType) {
 	case CAPSTYPE_GENERAL:
@@ -593,6 +624,9 @@ func readCapability(r io.Reader) (Capability, error) {
 		c = &DesktopCompositionCapability{}
 	case CAPSETTYPE_SURFACE_COMMANDS:
 		c = &SurfaceCommandsCapability{}
+	//case CAPSSETTYPE_FRAME_ACKNOWLEDGE:
+	//c =
+	//glog.Error("CAPSSETTYPE_FRAME_ACKNOWLEDGE")
 	default:
 		err := errors.New(fmt.Sprintf("unsupported Capability type 0x%04x", capType))
 		glog.Error(err)

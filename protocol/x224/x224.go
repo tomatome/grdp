@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/emission"
 	"github.com/icodeface/grdp/glog"
@@ -125,9 +126,9 @@ type ServerConnectionConfirm struct {
  * @returns {type.Component}
  */
 type DataHeader struct {
-	Header      uint8
-	MessageType MessageType
-	Separator   uint8
+	Header      uint8       `struc:"little"`
+	MessageType MessageType `struc:"uint8"`
+	Separator   uint8       `struc:"little"`
 }
 
 func NewDataHeader() *DataHeader {
@@ -175,7 +176,8 @@ func (x *X224) Write(b []byte) (n int, err error) {
 		return 0, err
 	}
 	buff.Write(b)
-	glog.Debug("x224 write", hex.EncodeToString(buff.Bytes()))
+
+	glog.Debug("x224 write:", hex.EncodeToString(buff.Bytes()))
 	return x.transport.Write(buff.Bytes())
 }
 
@@ -202,16 +204,21 @@ func (x *X224) Connect() error {
 }
 
 func (x *X224) recvConnectionConfirm(s []byte) {
-	glog.Debug("x224 recvConnectionConfirm", hex.EncodeToString(s))
+	glog.Debug("x224 recvConnectionConfirm ", hex.EncodeToString(s))
 	message := &ServerConnectionConfirm{}
 	if err := struc.Unpack(bytes.NewReader(s), message); err != nil {
 		glog.Error("ReadServerConnectionConfirm err", err)
 		return
 	}
-
+	glog.Infof("message: %+v", *message.ProtocolNeg)
 	if message.ProtocolNeg.Type == TYPE_RDP_NEG_FAILURE {
 		glog.Error(fmt.Sprintf("NODE_RDP_PROTOCOL_X224_NEG_FAILURE with code: %d,see https://msdn.microsoft.com/en-us/library/cc240507.aspx",
 			message.ProtocolNeg.Result))
+		//only use Standard RDP Security mechanisms
+		if message.ProtocolNeg.Result == 2 {
+			glog.Info("Only use Standard RDP Security mechanisms, Reconnect with Standard RDP")
+		}
+		x.Close()
 		return
 	}
 
@@ -229,14 +236,15 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 
 	if x.selectedProtocol == PROTOCOL_RDP {
 		glog.Info("*** RDP security selected ***")
+		x.Emit("connect", x.selectedProtocol)
 		return
 	}
 
 	if x.selectedProtocol == PROTOCOL_SSL {
 		glog.Info("*** SSL security selected ***")
-		err := x.transport.(*tpkt.TPKT).Conn.StartTLS()
+		err := x.transport.(*tpkt.TPKT).StartTLS()
 		if err != nil {
-			glog.Error("start tls failed", err)
+			glog.Error("start tls failed:", err)
 			return
 		}
 		x.Emit("connect", x.selectedProtocol)
@@ -245,7 +253,7 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 
 	if x.selectedProtocol == PROTOCOL_HYBRID {
 		glog.Info("*** NLA Security selected ***")
-		err := x.transport.(*tpkt.TPKT).Conn.StartNLA()
+		err := x.transport.(*tpkt.TPKT).StartNLA()
 		if err != nil {
 			glog.Error("start NLA failed", err)
 			return

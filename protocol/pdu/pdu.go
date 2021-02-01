@@ -3,7 +3,7 @@ package pdu
 import (
 	"bytes"
 	"encoding/hex"
-	"fmt"
+
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/emission"
 	"github.com/icodeface/grdp/glog"
@@ -19,6 +19,7 @@ type PDULayer struct {
 	serverCapabilities map[CapsType]Capability
 	clientCapabilities map[CapsType]Capability
 	fastPathSender     core.FastPathSender
+	demandActivePDU    *DemandActivePDU
 }
 
 func NewPDULayer(t core.Transport) *PDULayer {
@@ -117,7 +118,7 @@ func NewClient(t core.Transport) *Client {
 }
 
 func (c *Client) connect(data *gcc.ClientCoreData, userId uint16, channelId uint16) {
-	glog.Debug("pdu connect")
+	glog.Debug("pdu connect:", userId, ",", channelId)
 	c.clientCoreData = data
 	c.userId = userId
 	c.channelId = channelId
@@ -138,7 +139,7 @@ func (c *Client) recvDemandActivePDU(s []byte) {
 		return
 	}
 	c.sharedId = pdu.Message.(*DemandActivePDU).SharedId
-
+	c.demandActivePDU = pdu.Message.(*DemandActivePDU)
 	for _, caps := range pdu.Message.(*DemandActivePDU).CapabilitySets {
 		c.serverCapabilities[caps.Type()] = caps
 	}
@@ -150,6 +151,9 @@ func (c *Client) recvDemandActivePDU(s []byte) {
 
 func (c *Client) sendConfirmActivePDU() {
 	glog.Debug("PDU start sendConfirmActivePDU")
+
+	pdu := NewConfirmActivePDU()
+
 	generalCapa := c.clientCapabilities[CAPSTYPE_GENERAL].(*GeneralCapability)
 	generalCapa.OSMajorType = OSMAJORTYPE_WINDOWS
 	generalCapa.OSMinorType = OSMINORTYPE_WINDOWS_NT
@@ -170,14 +174,18 @@ func (c *Client) sendConfirmActivePDU() {
 	inputCapa.KeyboardLayout = c.clientCoreData.KbdLayout
 	inputCapa.KeyboardType = c.clientCoreData.KeyboardType
 	inputCapa.KeyboardSubType = c.clientCoreData.KeyboardSubType
-	// inputCapa.KeyboardFunctionKey = c.clientCoreData.KeyboardFnKeys
+	inputCapa.KeyboardFunctionKey = c.clientCoreData.KeyboardFnKeys
 	inputCapa.ImeFileName = c.clientCoreData.ImeFileName
 
-	pdu := NewConfirmActivePDU()
 	pdu.SharedId = c.sharedId
+	pdu.NumberCapabilities = c.demandActivePDU.NumberCapabilities
 	for _, v := range c.clientCapabilities {
 		pdu.CapabilitySets = append(pdu.CapabilitySets, v)
 	}
+	pdu.LengthSourceDescriptor = c.demandActivePDU.LengthSourceDescriptor
+	pdu.SourceDescriptor = c.demandActivePDU.SourceDescriptor
+	pdu.LengthCombinedCapabilities = c.demandActivePDU.LengthCombinedCapabilities
+
 	c.sendPDU(pdu)
 }
 
@@ -186,6 +194,7 @@ func (c *Client) sendClientFinalizeSynchronizePDU() {
 	c.sendDataPDU(NewSynchronizeDataPDU(c.channelId))
 	c.sendDataPDU(&ControlDataPDU{Action: CTRLACTION_COOPERATE})
 	c.sendDataPDU(&ControlDataPDU{Action: CTRLACTION_REQUEST_CONTROL})
+	//c.sendDataPDU(&PersistKeyPDU{BBitMask: 0x03})
 	c.sendDataPDU(&FontListDataPDU{ListFlags: 0x0003, EntrySize: 0x0032})
 }
 
@@ -284,7 +293,7 @@ func (c *Client) recvServerFontMapPDU(s []byte) {
 }
 
 func (c *Client) recvPDU(s []byte) {
-	fmt.Println("PDU recvPDU", hex.EncodeToString(s))
+	glog.Debug("PDU recvPDU", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
 	for r.Len() > 0 {
 		p, err := readPDU(r)
@@ -299,16 +308,35 @@ func (c *Client) recvPDU(s []byte) {
 }
 
 func (c *Client) RecvFastPath(secFlag byte, s []byte) {
-	glog.Debug("PDU RecvFastPath", hex.EncodeToString(s))
+	//glog.Debug("PDU RecvFastPath", hex.EncodeToString(s))
+	glog.Debug("PDU RecvFastPath", secFlag&0x2 != 0)
 	r := bytes.NewReader(s)
 	for r.Len() > 0 {
 		p, err := readFastPathUpdatePDU(r)
 		if err != nil {
-			glog.Error(err)
+			glog.Error("readFastPathUpdatePDU:", err)
+			//continue
 			return
 		}
 		if p.UpdateHeader == FASTPATH_UPDATETYPE_BITMAP {
 			c.Emit("update", p.Data.(*FastPathBitmapUpdateDataPDU).Rectangles)
 		}
 	}
+}
+
+type InputEventsInterface interface {
+	Serialize() []byte
+}
+
+func (c *Client) SendInputEvents(msgType uint16, events []InputEventsInterface) {
+	pdu := &ClientInputEventPDU{}
+	pdu.NumEvents = uint16(len(events))
+	pdu.SlowPathInputEvents = make([]SlowPathInputEvent, 0, pdu.NumEvents)
+	for _, in := range events {
+		seria := in.Serialize()
+		s := SlowPathInputEvent{0, msgType, len(seria), seria}
+		pdu.SlowPathInputEvents = append(pdu.SlowPathInputEvents, s)
+	}
+
+	c.sendDataPDU(pdu)
 }

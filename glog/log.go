@@ -1,9 +1,14 @@
 package glog
 
 import (
+	"fmt"
 	"log"
 	"sync"
 )
+
+func init() {
+
+}
 
 var (
 	logger *log.Logger
@@ -22,6 +27,7 @@ const (
 )
 
 func SetLogger(l *log.Logger) {
+	l.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	logger = l
 }
 
@@ -41,7 +47,7 @@ func Debug(v ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
 		logger.SetPrefix("[DEBUG]")
-		logger.Print(v)
+		logger.Output(2, fmt.Sprintln(v...))
 	}
 }
 
@@ -51,17 +57,25 @@ func Info(v ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
 		logger.SetPrefix("[INFO]")
-		logger.Print(v)
+		logger.Output(2, fmt.Sprintln(v...))
 	}
 }
-
+func Infof(f string, v ...interface{}) {
+	checkLogger()
+	if level <= INFO {
+		mu.Lock()
+		defer mu.Unlock()
+		logger.SetPrefix("[INFO]")
+		logger.Output(2, fmt.Sprintln(fmt.Sprintf(f, v...)))
+	}
+}
 func Warn(v ...interface{}) {
 	checkLogger()
 	if level <= WARN {
 		mu.Lock()
 		defer mu.Unlock()
 		logger.SetPrefix("[WARN]")
-		logger.Print(v)
+		logger.Output(2, fmt.Sprintln(v...))
 	}
 }
 
@@ -71,6 +85,6 @@ func Error(v ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
 		logger.SetPrefix("[ERROR]")
-		logger.Print(v)
+		logger.Output(2, fmt.Sprintln(v...))
 	}
 }

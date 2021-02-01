@@ -3,9 +3,12 @@ package tpkt
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
+
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/emission"
 	"github.com/icodeface/grdp/glog"
+	"github.com/icodeface/grdp/protocol/nla"
 )
 
 // take idea from https://github.com/Madnikulin50/gordp
@@ -27,17 +30,103 @@ const (
 type TPKT struct {
 	emission.Emitter
 	Conn             *core.SocketLayer
+	ntlm             *nla.NTLMv2
 	secFlag          byte
+	lastShortLength  int
 	fastPathListener core.FastPathListener
+	ntlmSec          *nla.NTLMv2Security
 }
 
-func New(s *core.SocketLayer) *TPKT {
+func New(s *core.SocketLayer, ntlm *nla.NTLMv2) *TPKT {
 	t := &TPKT{
 		Emitter: *emission.NewEmitter(),
 		Conn:    s,
-		secFlag: 0}
+		secFlag: 0,
+		ntlm:    ntlm}
 	core.StartReadBytes(2, s, t.recvHeader)
 	return t
+}
+
+func (t *TPKT) StartTLS() error {
+	return t.Conn.StartTLS()
+}
+
+func (t *TPKT) StartNLA() error {
+	glog.Info("StartNLA")
+	err := t.StartTLS()
+	if err != nil {
+		glog.Info("start tls failed", err)
+		return err
+	}
+	req := nla.EncodeDERTRequest([]nla.Message{t.ntlm.GetNegotiateMessage()}, nil, nil)
+	_, err = t.Conn.Write(req)
+	if err != nil {
+		glog.Info("send NegotiateMessage", err)
+		return err
+	}
+
+	resp := make([]byte, 1024)
+	n, err := t.Conn.Read(resp)
+	if err != nil {
+		return fmt.Errorf("read %s", err)
+	} else {
+		glog.Info("Read success")
+	}
+	return t.recvChallenge(resp[:n])
+}
+
+func (t *TPKT) recvChallenge(data []byte) error {
+	glog.Debug("recvChallenge", hex.EncodeToString(data))
+	tsreq, err := nla.DecodeDERTRequest(data)
+	if err != nil {
+		glog.Info("DecodeDERTRequest", err)
+		return err
+	}
+
+	// get pubkey
+	pubkey, _ := t.Conn.TlsPubKey()
+	authMsg, ntlmSec := t.ntlm.GetAuthenticateMessage(tsreq.NegoTokens[0].Data)
+	t.ntlmSec = ntlmSec
+	encryptPubkey := ntlmSec.GssEncrypt(pubkey)
+	req := nla.EncodeDERTRequest([]nla.Message{authMsg}, nil, encryptPubkey)
+
+	_, err = t.Conn.Write(req)
+	if err != nil {
+		glog.Info("send AuthenticateMessage", err)
+		return err
+	}
+
+	resp := make([]byte, 1024)
+	n, err := t.Conn.Read(resp)
+	if err != nil {
+		return fmt.Errorf("read %s", err)
+	} else {
+		glog.Info("Read success")
+	}
+	return t.recvPubKeyInc(resp[:n])
+}
+
+func (t *TPKT) recvPubKeyInc(data []byte) error {
+	glog.Debug("recvPubKeyInc", hex.EncodeToString(data))
+	tsreq, err := nla.DecodeDERTRequest(data)
+	if err != nil {
+		glog.Info("DecodeDERTRequest", err)
+		return err
+	}
+
+	pubkey := t.ntlmSec.GssDecrypt([]byte(tsreq.PubKeyAuth))
+	glog.Info(pubkey)
+	domain, username, password := t.ntlm.GetEncodedCredentials()
+	credentials := nla.EncodeDERTCredentials(domain, username, password)
+	authInfo := t.ntlmSec.GssEncrypt(credentials)
+	req := nla.EncodeDERTRequest([]nla.Message{}, authInfo, nil)
+	_, err = t.Conn.Write(req)
+	if err != nil {
+		glog.Info("send AuthenticateMessage", err)
+		return err
+	}
+
+	return nil
 }
 
 func (t *TPKT) Read(b []byte) (n int, err error) {
@@ -77,19 +166,19 @@ func (t *TPKT) recvHeader(s []byte, err error) {
 		t.Emit("error", err)
 		return
 	}
-	version := s[0]
+	r := bytes.NewReader(s)
+	version, _ := core.ReadUInt8(r)
 	if version == FASTPATH_ACTION_X224 {
 		glog.Debug("tptk recvHeader FASTPATH_ACTION_X224, wait for recvExtendedHeader")
 		core.StartReadBytes(2, t.Conn, t.recvExtendedHeader)
 	} else {
 		t.secFlag = (version >> 6) & 0x3
-		length := int(s[1])
-		if length&0x80 != 0 {
-			core.StartReadBytes(1, t.Conn, func(s []byte, err error) {
-				t.recvExtendedFastPathHeader(s, length, err)
-			})
+		length, _ := core.ReadUInt8(r)
+		t.lastShortLength = int(length)
+		if t.lastShortLength&0x80 != 0 {
+			core.StartReadBytes(1, t.Conn, t.recvExtendedFastPathHeader)
 		} else {
-			core.StartReadBytes(length-2, t.Conn, t.recvFastPath)
+			core.StartReadBytes(t.lastShortLength-2, t.Conn, t.recvFastPath)
 		}
 	}
 }
@@ -101,7 +190,7 @@ func (t *TPKT) recvExtendedHeader(s []byte, err error) {
 	}
 	r := bytes.NewReader(s)
 	size, _ := core.ReadUint16BE(r)
-	glog.Debug("tpkt wait recvData")
+	glog.Debug("tpkt wait recvData:", size)
 	core.StartReadBytes(int(size-4), t.Conn, t.recvData)
 }
 
@@ -111,19 +200,19 @@ func (t *TPKT) recvData(s []byte, err error) {
 		return
 	}
 	t.Emit("data", s)
-	glog.Debug("tpkt wait recvHeader")
 	core.StartReadBytes(2, t.Conn, t.recvHeader)
 }
 
-func (t *TPKT) recvExtendedFastPathHeader(s []byte, length int, err error) {
-	glog.Debug("tpkt recvExtendedFastPathHeader", hex.EncodeToString(s), length, err)
+func (t *TPKT) recvExtendedFastPathHeader(s []byte, err error) {
+	glog.Debug("tpkt recvExtendedFastPathHeader", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
 	rightPart, err := core.ReadUInt8(r)
 	if err != nil {
 		glog.Error("TPTK recvExtendedFastPathHeader", err)
 		return
 	}
-	leftPart := length & ^0x80
+
+	leftPart := t.lastShortLength & ^0x80
 	packetSize := (leftPart << 8) + int(rightPart)
 	core.StartReadBytes(packetSize-3, t.Conn, t.recvFastPath)
 }
@@ -133,6 +222,7 @@ func (t *TPKT) recvFastPath(s []byte, err error) {
 	if err != nil {
 		return
 	}
+
 	t.fastPathListener.RecvFastPath(t.secFlag, s)
 	core.StartReadBytes(2, t.Conn, t.recvHeader)
 }

@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+
 	"github.com/icodeface/grdp/core"
 	"github.com/icodeface/grdp/glog"
 	"github.com/lunixbochs/struc"
-	"io"
 )
 
 const (
@@ -73,6 +74,11 @@ const (
 	FASTPATH_UPDATETYPE_POINTER      = 0xB
 )
 
+const (
+	BITMAP_COMPRESSION = 0x0001
+	//NO_BITMAP_COMPRESSION_HDR = 0x0400
+)
+
 type ShareDataHeader struct {
 	SharedId           uint32 `struc:"little"`
 	Padding1           uint8  `struc:"little"`
@@ -101,7 +107,7 @@ type DemandActivePDU struct {
 	SharedId                   uint32       `struc:"little"`
 	LengthSourceDescriptor     uint16       `struc:"little,sizeof=SourceDescriptor"`
 	LengthCombinedCapabilities uint16       `struc:"little"`
-	SourceDescriptor           string       `struc:"sizefrom=LengthSourceDescriptor"`
+	SourceDescriptor           []byte       `struc:"sizefrom=LengthSourceDescriptor"`
 	NumberCapabilities         uint16       `struc:"little,sizeof=CapabilitySets"`
 	Pad2Octets                 uint16       `struc:"little"`
 	CapabilitySets             []Capability `struc:"sizefrom=NumberCapabilities"`
@@ -145,7 +151,7 @@ func readDemandActivePDU(r io.Reader) (*DemandActivePDU, error) {
 	if err != nil {
 		return nil, err
 	}
-	d.SourceDescriptor = string(sourceDescriptorBytes)
+	d.SourceDescriptor = sourceDescriptorBytes
 	d.NumberCapabilities, err = core.ReadUint16LE(r)
 	d.Pad2Octets, err = core.ReadUint16LE(r)
 	d.CapabilitySets = make([]Capability, 0)
@@ -153,11 +159,14 @@ func readDemandActivePDU(r io.Reader) (*DemandActivePDU, error) {
 	for i := 0; i < int(d.NumberCapabilities); i++ {
 		c, err := readCapability(r)
 		if err != nil {
-			return nil, err
+			//return nil, err
+			continue
 		}
 		d.CapabilitySets = append(d.CapabilitySets, c)
 	}
+	d.NumberCapabilities = uint16(len(d.CapabilitySets))
 	d.SessionId, err = core.ReadUInt32LE(r)
+	glog.Info("SessionId:", d.SessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +178,7 @@ type ConfirmActivePDU struct {
 	OriginatorId               uint16       `struc:"little"`
 	LengthSourceDescriptor     uint16       `struc:"little,sizeof=SourceDescriptor"`
 	LengthCombinedCapabilities uint16       `struc:"little"`
-	SourceDescriptor           string       `struc:"sizefrom=LengthSourceDescriptor"`
+	SourceDescriptor           []byte       `struc:"sizefrom=LengthSourceDescriptor"`
 	NumberCapabilities         uint16       `struc:"little,sizeof=CapabilitySets"`
 	Pad2Octets                 uint16       `struc:"little"`
 	CapabilitySets             []Capability `struc:"sizefrom=NumberCapabilities"`
@@ -235,7 +244,7 @@ func NewConfirmActivePDU() *ConfirmActivePDU {
 	return &ConfirmActivePDU{
 		OriginatorId:     0x03EA,
 		CapabilitySets:   make([]Capability, 0),
-		SourceDescriptor: "rdpy",
+		SourceDescriptor: []byte("rdpy"),
 	}
 }
 
@@ -254,7 +263,7 @@ func readConfirmActivePDU(r io.Reader) (*ConfirmActivePDU, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.SourceDescriptor = string(sourceDescriptorBytes)
+	p.SourceDescriptor = sourceDescriptorBytes
 	p.NumberCapabilities, err = core.ReadUint16LE(r)
 	p.Pad2Octets, err = core.ReadUint16LE(r)
 
@@ -412,6 +421,26 @@ func (*FontMapDataPDU) Type2() uint8 {
 	return PDUTYPE2_FONTMAP
 }
 
+type PersistKeyPDU struct {
+	NumEntriesCache0   uint16 `struc:"little"`
+	NumEntriesCache1   uint16 `struc:"little"`
+	NumEntriesCache2   uint16 `struc:"little"`
+	NumEntriesCache3   uint16 `struc:"little"`
+	NumEntriesCache4   uint16 `struc:"little"`
+	TotalEntriesCache0 uint16 `struc:"little"`
+	TotalEntriesCache1 uint16 `struc:"little"`
+	TotalEntriesCache2 uint16 `struc:"little"`
+	TotalEntriesCache3 uint16 `struc:"little"`
+	TotalEntriesCache4 uint16 `struc:"little"`
+	BBitMask           uint8  `struc:"little"`
+	Pad1               uint8  `struc:"little"`
+	Ppad3              uint16 `struc:"little"`
+}
+
+func (*PersistKeyPDU) Type2() uint8 {
+	return PDUTYPE2_BITMAPCACHE_PERSISTENT_LIST
+}
+
 type UpdateData interface {
 	FastPathUpdateType() uint8
 }
@@ -443,6 +472,42 @@ type FastPathBitmapUpdateDataPDU struct {
 	Rectangles       []BitmapData
 }
 
+func (b *BitmapData) IsCompress() bool {
+	return b.Flags&BITMAP_COMPRESSION != 0
+}
+func (f *FastPathBitmapUpdateDataPDU) Unpack(data []byte) error {
+	var err error
+	r := bytes.NewReader(data)
+	f.Header, err = core.ReadUint16LE(r)
+	f.NumberRectangles, err = core.ReadUint16LE(r)
+	f.Rectangles = make([]BitmapData, 0, f.NumberRectangles)
+	for i := 0; i < int(f.NumberRectangles); i++ {
+		rect := BitmapData{}
+		rect.DestLeft, err = core.ReadUint16LE(r)
+		rect.DestTop, err = core.ReadUint16LE(r)
+		rect.DestRight, err = core.ReadUint16LE(r)
+		rect.DestBottom, err = core.ReadUint16LE(r)
+		rect.Width, err = core.ReadUint16LE(r)
+		rect.Height, err = core.ReadUint16LE(r)
+		rect.BitsPerPixel, err = core.ReadUint16LE(r)
+		rect.Flags, err = core.ReadUint16LE(r)
+		rect.BitmapLength, err = core.ReadUint16LE(r)
+		ln := rect.BitmapLength
+		if rect.Flags&BITMAP_COMPRESSION != 0 && (rect.Flags&NO_BITMAP_COMPRESSION_HDR == 0) {
+			rect.BitmapComprHdr = new(BitmapCompressedDataHeader)
+			rect.BitmapComprHdr.CbCompFirstRowSize, err = core.ReadUint16LE(r)
+			rect.BitmapComprHdr.CbCompMainBodySize, err = core.ReadUint16LE(r)
+			rect.BitmapComprHdr.CbScanWidth, err = core.ReadUint16LE(r)
+			rect.BitmapComprHdr.CbUncompressedSize, err = core.ReadUint16LE(r)
+			ln = rect.BitmapComprHdr.CbCompMainBodySize
+		}
+
+		rect.BitmapDataStream, err = core.ReadBytes(int(ln), r)
+		f.Rectangles = append(f.Rectangles, rect)
+	}
+	return err
+}
+
 func (*FastPathBitmapUpdateDataPDU) FastPathUpdateType() uint8 {
 	return FASTPATH_UPDATETYPE_BITMAP
 }
@@ -454,6 +519,10 @@ type FastPathUpdatePDU struct {
 	Data             UpdateData
 }
 
+const (
+	FASTPATH_OUTPUT_COMPRESSION_USED = 0x2
+)
+
 func readFastPathUpdatePDU(r io.Reader) (*FastPathUpdatePDU, error) {
 	f := &FastPathUpdatePDU{}
 	var err error
@@ -461,29 +530,45 @@ func readFastPathUpdatePDU(r io.Reader) (*FastPathUpdatePDU, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.CompressionFlags, err = core.ReadUInt8(r)
+	if (f.UpdateHeader>>4)&FASTPATH_OUTPUT_COMPRESSION_USED != 0 {
+		f.CompressionFlags, err = core.ReadUInt8(r)
+	}
+
 	f.Size, err = core.ReadUint16LE(r)
 	if err != nil {
 		return nil, err
 	}
+	if f.Size == 0 {
+		return f, nil
+	}
 	dataBytes, err := core.ReadBytes(int(f.Size), r)
 	if err != nil {
+		glog.Info(err)
 		return nil, err
 	}
+
 	var d UpdateData
 	switch f.UpdateHeader & 0xf {
 	case FASTPATH_UPDATETYPE_BITMAP:
-		d = &FastPathBitmapUpdateDataPDU{}
-	default:
-		glog.Debug("unsupported FastPathUpdatePDU data type", f.UpdateHeader)
-		d = nil
-	}
-	if d != nil {
-		err = struc.Unpack(bytes.NewReader(dataBytes), d)
+		fb := &FastPathBitmapUpdateDataPDU{}
+		err = fb.Unpack(dataBytes)
 		if err != nil {
+			glog.Error("Unpack:", err)
 			return nil, err
 		}
+		d = fb
+	default:
+		glog.Debug("unsupported FastPathUpdatePDU data type", f.UpdateHeader)
+		return f, errors.New("unsupported data type")
+		//d = nil
 	}
+	//if d != nil {
+	//err = struc.Unpack(bytes.NewReader(dataBytes), d)
+	//if err != nil {
+	//glog.Error("Unpack:", err)
+	//return nil, err
+	//}
+	//}
 	f.Data = d
 	return f, nil
 }
@@ -518,17 +603,22 @@ func readPDU(r io.Reader) (*PDU, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	pdu.ShareCtrlHeader = header
 
 	var d PDUMessage
 	switch pdu.ShareCtrlHeader.PDUType {
 	case PDUTYPE_DEMANDACTIVEPDU:
+		glog.Debug("PDUTYPE_DEMANDACTIVEPDU")
 		d, err = readDemandActivePDU(r)
 	case PDUTYPE_DATAPDU:
+		glog.Debug("PDUTYPE_DATAPDU")
 		d, err = readDataPDU(r)
 	case PDUTYPE_CONFIRMACTIVEPDU:
+		glog.Debug("PDUTYPE_CONFIRMACTIVEPDU")
 		d, err = readConfirmActivePDU(r)
 	case PDUTYPE_DEACTIVATEALLPDU:
+		glog.Debug("PDUTYPE_DEACTIVATEALLPDU")
 		d, err = readDeactiveAllPDU(r)
 	default:
 		glog.Error("PDU invalid pdu type")
@@ -545,4 +635,68 @@ func (p *PDU) serialize() []byte {
 	struc.Pack(buff, p.ShareCtrlHeader)
 	core.WriteBytes(p.Message.Serialize(), buff)
 	return buff.Bytes()
+}
+
+type SlowPathInputEvent struct {
+	EventTime         uint32 `struc:"little"`
+	MessageType       uint16 `struc:"little"`
+	Size              int    `struc:"skip"`
+	SlowPathInputData []byte `struc:"sizefrom=Size"`
+}
+
+type PointerEvent struct {
+	PointerFlags uint16 `struc:"little"`
+	XPos         uint16 `struc:"little"`
+	YPos         uint16 `struc:"little"`
+}
+
+func (p *PointerEvent) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	struc.Pack(buff, p)
+	return buff.Bytes()
+}
+
+type SynchronizeEvent struct {
+	Pad2Octets  uint16 `struc:"little"`
+	ToggleFlags uint32 `struc:"little"`
+}
+
+func (p *SynchronizeEvent) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	struc.Pack(buff, p)
+	return buff.Bytes()
+}
+
+type ScancodeKeyEvent struct {
+	KeyboardFlags uint16 `struc:"little"`
+	KeyCode       uint16 `struc:"little"`
+	Pad2Octets    uint16 `struc:"little"`
+}
+
+func (p *ScancodeKeyEvent) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	struc.Pack(buff, p)
+	return buff.Bytes()
+}
+
+type UnicodeKeyEvent struct {
+	KeyboardFlags uint16 `struc:"little"`
+	Unicode       uint16 `struc:"little"`
+	Pad2Octets    uint16 `struc:"little"`
+}
+
+func (p *UnicodeKeyEvent) Serialize() []byte {
+	buff := &bytes.Buffer{}
+	struc.Pack(buff, p)
+	return buff.Bytes()
+}
+
+type ClientInputEventPDU struct {
+	NumEvents           uint16               `struc:"little,sizeof=SlowPathInputEvents"`
+	Pad2Octets          uint16               `struc:"little"`
+	SlowPathInputEvents []SlowPathInputEvent `struc:"little"`
+}
+
+func (*ClientInputEventPDU) Type2() uint8 {
+	return PDUTYPE2_INPUT
 }

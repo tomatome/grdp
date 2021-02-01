@@ -6,8 +6,9 @@ grdp is a pure Golang implementation of the Microsoft RDP (Remote Desktop Protoc
 
 **The project is under development and not finished yet.**
 
-* [ ] SSL Authentication (soon)
-* [ ] NLA Authentication
+* [x] Standard RDP Authentication
+* [x] SSL Authentication
+* [ ] NLA Authentication（need test）
 
 ## Example
 
