@@ -6,10 +6,9 @@ import (
 	"crypto/rc4"
 	"time"
 
-	"github.com/icodeface/grdp/core"
-
-	"github.com/icodeface/grdp/glog"
 	"github.com/lunixbochs/struc"
+	"github.com/tomatome/grdp/core"
+	"github.com/tomatome/grdp/glog"
 )
 
 const (

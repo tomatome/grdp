@@ -13,12 +13,12 @@ import (
 
 	"github.com/lunixbochs/struc"
 
-	"github.com/icodeface/grdp/core"
-	"github.com/icodeface/grdp/emission"
-	"github.com/icodeface/grdp/glog"
-	"github.com/icodeface/grdp/protocol/lic"
-	"github.com/icodeface/grdp/protocol/t125"
-	"github.com/icodeface/grdp/protocol/t125/gcc"
+	"github.com/tomatome/grdp/core"
+	"github.com/tomatome/grdp/emission"
+	"github.com/tomatome/grdp/glog"
+	"github.com/tomatome/grdp/protocol/lic"
+	"github.com/tomatome/grdp/protocol/t125"
+	"github.com/tomatome/grdp/protocol/t125/gcc"
 )
 
 /**

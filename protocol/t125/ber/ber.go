@@ -3,8 +3,9 @@ package ber
 import (
 	"errors"
 	"fmt"
-	"github.com/icodeface/grdp/core"
 	"io"
+
+	"github.com/tomatome/grdp/core"
 )
 
 const (

@@ -1,4 +1,4 @@
-module github.com/icodeface/grdp
+module github.com/tomatome/grdp
 
 go 1.12
 
@@ -14,7 +14,7 @@ require (
 	github.com/gocarina/gocsv v0.0.0-20200925213129-04be9ee2e1a2 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/google/gxui v0.0.0-20151028112939-f85e0a97b3a4 // indirect
-	github.com/googollee/go-socket.io v1.4.4 // indirect
+	github.com/googollee/go-socket.io v1.4.4
 	github.com/goxjs/gl v0.0.0-20171128034433-dc8f4a9a3c9c // indirect
 	github.com/goxjs/glfw v0.0.0-20191126052801-d2efb5f20838 // indirect
 	github.com/icodeface/tls v0.0.0-20190904082144-a3e1fe30543e
