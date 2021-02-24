@@ -88,3 +88,12 @@ func Error(v ...interface{}) {
 		logger.Output(2, fmt.Sprintln(v...))
 	}
 }
+func Errorf(f string, v ...interface{}) {
+	checkLogger()
+	if level <= ERROR {
+		mu.Lock()
+		defer mu.Unlock()
+		logger.SetPrefix("[ERROR]")
+		logger.Output(2, fmt.Sprintln(fmt.Sprintf(f, v...)))
+	}
+}

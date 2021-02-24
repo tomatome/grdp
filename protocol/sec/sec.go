@@ -11,8 +11,6 @@ import (
 	"math/big"
 	"unicode/utf16"
 
-	"github.com/lunixbochs/struc"
-
 	"github.com/tomatome/grdp/core"
 	"github.com/tomatome/grdp/emission"
 	"github.com/tomatome/grdp/glog"
@@ -104,6 +102,7 @@ func NewExtendedInfo() *RDPExtendedInfo {
 		ClientAddress:       []byte{0, 0},
 		ClientDir:           []byte{0, 0},
 		ClientTimeZone:      make([]byte, 172),
+		ClientSessionId:     0,
 	}
 }
 
@@ -115,8 +114,8 @@ func (o *RDPExtendedInfo) Serialize() []byte {
 	core.WriteUInt16LE(uint16(len(o.ClientDir)), buff)
 	core.WriteBytes(o.ClientDir, buff)
 	core.WriteBytes(o.ClientTimeZone, buff)
-	core.WriteUInt32LE(0, buff)
-	core.WriteUInt32LE(0, buff)
+	core.WriteUInt32LE(o.ClientSessionId, buff)
+	core.WriteUInt32LE(o.PerformanceFlags, buff)
 
 	return buff.Bytes()
 }
@@ -166,8 +165,8 @@ func (o *RDPInfo) Serialize(hasExtended bool) []byte {
 	core.WriteBytes(o.AlternateShell, buff)
 	core.WriteBytes(o.WorkingDir, buff)
 	if hasExtended {
-		struc.Pack(buff, o.ExtendedInfo)
-		//core.WriteBytes(o.ExtendedInfo.Serialize(), buff)
+		//struc.Pack(buff, o.ExtendedInfo)
+		core.WriteBytes(o.ExtendedInfo.Serialize(), buff)
 	}
 	return buff.Bytes()
 }

@@ -97,7 +97,9 @@
 			else {
 				output = reverse(bitmap);
 			}
-			
+			console.log(bitmap);
+			console.log("-------------");
+			console.log(output);
 			// use image data to use asm.js
 			//var imageData = this.ctx.createImageData(output.width, output.height);
 			var imageData = this.ctx.getImageData(bitmap.destLeft, bitmap.destTop,output.width, output.height);

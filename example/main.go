@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"sync"
 	"text/template"
 	"time"
 
@@ -24,6 +25,8 @@ import (
 	"github.com/tomatome/grdp/protocol/x224"
 )
 
+var im = 0
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	socketIO()
@@ -31,7 +34,6 @@ func main() {
 func showPreview(w http.ResponseWriter, r *http.Request) {
 	t, err := template.ParseFiles("static/html/index.html")
 	if err != nil {
-		fmt.Println("show:", err)
 		w.Write([]byte(err.Error() + "\n"))
 		return
 	}
@@ -57,17 +59,15 @@ type Info struct {
 func socketIO() {
 	server, _ := socketio.NewServer(nil)
 	server.OnConnect("/", func(so socketio.Conn) error {
-		fmt.Println("OnConnect")
+		fmt.Println("OnConnect", so.ID())
 		so.Emit("rdp-connect", true)
-		fmt.Println("ID:", so.ID())
 		return nil
 	})
 	server.OnEvent("/", "infos", func(so socketio.Conn, data interface{}) {
 		var info Info
 		v, _ := json.Marshal(data)
 		json.Unmarshal(v, &info)
-		fmt.Println("infos:", info)
-		fmt.Println("ID:", so.ID())
+		fmt.Println(so.ID(), "logon infos:", info)
 
 		g := NewClient(fmt.Sprintf("%s:%s", info.Ip, info.Port), glog.INFO)
 		err := g.Login(info.Domain, info.Username, info.Passwd, info.Width, info.Height)
@@ -92,17 +92,38 @@ func socketIO() {
 			//s := so
 			glog.Info(time.Now(), "on update Bitmap:", len(rectangles))
 			bs := make([]Bitmap, 0, len(rectangles))
+			mu := sync.Mutex{}
+			wg := &sync.WaitGroup{}
 			for _, v := range rectangles {
+				wg.Add(1)
+				//go func(wg *sync.WaitGroup) {
 				IsCompress := v.IsCompress()
-				//glog.Info(IsCompress)
-				b := Bitmap{v.DestLeft, v.DestTop, v.DestRight, v.DestBottom,
-					v.Width, v.Height, v.BitsPerPixel, IsCompress, v.BitmapDataStream}
-				bs = append(bs, b)
-			}
-			so.Emit("rdp-bitmap", bs)
-		})
+				data := v.BitmapDataStream
+				glog.Info("data:", data)
+				b1 := Bitmap{v.DestLeft, v.DestTop, v.DestRight, v.DestBottom,
+					v.Width, v.Height, v.BitsPerPixel, IsCompress, data}
 
-		fmt.Println("close g")
+				so.Emit("rdp-bitmap", []Bitmap{b1})
+				if IsCompress {
+					data = decompress(&v)
+					IsCompress = false
+				}
+
+				glog.Info(IsCompress, v.BitsPerPixel)
+				b := Bitmap{v.DestLeft, v.DestTop, v.DestRight, v.DestBottom,
+					v.Width, v.Height, v.BitsPerPixel, IsCompress, data}
+
+				mu.Lock()
+				so.Emit("rdp-bitmap", []Bitmap{b})
+				bs = append(bs, b)
+				mu.Unlock()
+				wg.Done()
+				//os.Exit(0)
+				//}(wg)
+			}
+			wg.Wait()
+			//so.Emit("rdp-bitmap", bs)
+		})
 	})
 
 	server.OnEvent("/", "mouse", func(so socketio.Conn, x, y uint16, button int, isPressed bool) {
@@ -165,7 +186,6 @@ func socketIO() {
 	})
 
 	server.OnError("/", func(so socketio.Conn, err error) {
-		fmt.Println(so)
 		if so == nil || so.Context() == nil {
 			return
 		}
@@ -269,45 +289,166 @@ type Bitmap struct {
 	Data         []byte `json:"data"`
 }
 
-/*func decompress (bitmap *pdu.BitmapData) {
-var fName interface {}
-switch (bitmap.bitsPerPixel) {
-case 15:
-fName = "bitmap_decompress_15"
+func decompress(bitmap *pdu.BitmapData) []byte {
+	var fName string
+	switch bitmap.BitsPerPixel {
+	case 15:
+		fName = "bitmap_decompress_15"
 
-case 16:
-fName = "bitmap_decompress_16"
+	case 16:
+		fName = "bitmap_decompress_16"
 
-case 24:
-fName = "bitmap_decompress_24"
+	case 24:
+		fName = "bitmap_decompress_24"
 
-case 32:
-fName = "bitmap_decompress_32"
+	case 32:
+		fName = "bitmap_decompress_32"
 
-default:
-glog.Error('invalid bitmap data format')
+	default:
+		glog.Error("invalid bitmap data format")
+	}
+	glog.Info(fName)
+	input := bitmap.BitmapDataStream
+	glog.Info(bitmap.Width, bitmap.Height)
+	output := bitmap_decompress(input, bitmap.Width, bitmap.Height)
+
+	glog.Info("input:", input)
+	glog.Info("output:", output)
+	//os.Exit(0)
+
+	return output
 }
 
-var input = new Uint8Array(bitmap.bitmapDataStream);
-var inputPtr = rle._malloc(input.length);
-var inputHeap = new Uint8Array(rle.HEAPU8.buffer, inputPtr, input.length);
-inputHeap.set(input);
+func process_plane(in []byte, width, height int, out *[]byte, idx int) int {
+	var (
+		color     byte
+		x         byte
+		last_line *[]byte
+	)
 
-var ouputSize = bitmap.width.value * bitmap.height.value * 4;
-var outputPtr = rle._malloc(ouputSize);
+	indexh := 0
+	i := 0
+	j := idx
+	k := 0
+	for indexh < height {
+		j += width*height*4 - (indexh+1)*width*4
+		color = 0
+		this_line := (*out)[j:]
+		indexw := 0
+		if last_line == nil {
+			glog.Info("first", indexw, width)
+			for indexw < width {
+				code := in[i]
+				i++
+				k++
+				replen := code & 0xf
+				collen := (code >> 4) & 0xf
+				revcode := (replen << 4) | collen
+				glog.Info("first1", indexw, revcode, collen, replen)
+				if (revcode < 47) && (revcode >= 16) {
+					replen = revcode
+					collen = 0
+				}
+				glog.Info("first2", collen)
+				for collen > 0 {
+					color = in[i]
+					i++
+					k++
+					(*out)[j] = color
+					glog.Info("(*out)[j]", j, (*out)[j])
+					j += 4
+					indexw++
+					collen--
+				}
+				glog.Info("first3", replen)
+				for replen > 0 {
+					(*out)[j] = color
+					glog.Info("(*out)[j]", j, (*out)[j])
+					j += 4
+					indexw++
+					replen--
+				}
+			}
+			//glog.Info("out:", *out)
+		} else {
+			glog.Info("indexw", indexw, width, k, len(in))
+			for indexw < width && i < len(in)-1 {
+				code := in[i]
+				i++
+				k++
+				replen := code & 0xf
+				collen := (code >> 4) & 0xf
+				revcode := (replen << 4) | collen
+				glog.Info("code2", code, replen, collen, revcode)
+				if (revcode < 47) && (revcode >= 16) {
+					replen = revcode
+					collen = 0
+				}
+				glog.Info("2=", collen)
+				for collen > 0 && j < len(*last_line)-1 {
+					x = in[i]
+					i++
+					k++
+					glog.Info("x=", x, x&1, x>>1)
+					if x&1 != 0 {
+						x = x >> 1
+						x = x + 1
+						color = -x
+					} else {
+						x = x >> 1
+						color = x
+					}
+					glog.Info("color:", color)
+					x = (*last_line)[indexw*4] + color
+					glog.Info("(*out)[indexw*4]=", indexw*4, (*last_line)[indexw*4])
+					(*out)[j] = x
+					j += 4
+					indexw++
+					collen--
+				}
+				glog.Info("3=", replen)
+				for replen > 0 && j < len(*last_line)-1 {
+					x = (*last_line)[indexw*4] + color
+					(*out)[j] = x
+					glog.Infof("*out3[%d]=%v", j, (*out)[j])
+					j += 4
+					indexw++
+					replen--
+				}
+			}
+		}
+		indexh++
+		last_line = &this_line
+	}
+	return k - 1
+}
 
-var outputHeap = new Uint8Array(rle.HEAPU8.buffer, outputPtr, ouputSize);
-
-var res = rle.ccall(fName,
-'number',
-['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number'],
-[outputHeap.byteOffset, bitmap.width.value, bitmap.height.value, bitmap.width.value, bitmap.height.value, inputHeap.byteOffset, input.length]
-);
-
-var output = new Uint8ClampedArray(outputHeap.buffer, outputHeap.byteOffset, ouputSize);
-
-rle._free(inputPtr);
-rle._free(outputPtr);
-
-return output;
-}*/
+func bitmap_decompress(input []byte, width1, height1 uint16) []byte {
+	width, height := int(width1), int(height1)
+	output := make([]byte, width*height*4)
+	glog.Info(width, height, cap(output), len(input))
+	code := input[0]
+	if code != 0x10 {
+		return nil
+	}
+	org := input
+	total_pro := 1
+	input0 := org[total_pro:]
+	bytes_pro := process_plane(input0, width, height, &output, 3)
+	glog.Info("output1:", output)
+	glog.Info("total_pro:", total_pro, bytes_pro)
+	total_pro += bytes_pro
+	input0 = org[total_pro:]
+	bytes_pro = process_plane(input0, width, height, &output, 2)
+	glog.Info("total_pro:", total_pro, bytes_pro)
+	total_pro += bytes_pro
+	input0 = org[total_pro:]
+	bytes_pro = process_plane(input0, width, height, &output, 1)
+	glog.Info("total_pro:", total_pro, bytes_pro)
+	total_pro += bytes_pro
+	input0 = org[total_pro:]
+	bytes_pro = process_plane(input0, width, height, &output, 0)
+	glog.Info("total_pro:", total_pro, bytes_pro)
+	total_pro += bytes_pro
+	return output
+}

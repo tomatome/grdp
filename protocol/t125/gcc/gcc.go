@@ -541,12 +541,9 @@ func ReadConferenceCreateResponse(data []byte) []interface{} {
 	for ln > 0 {
 		t, _ := core.ReadUint16LE(r)
 		l, _ := core.ReadUint16LE(r)
-		glog.Info(ln, ":", l)
 		dataBytes, _ := core.ReadBytes(int(l)-4, r)
-		glog.Info(dataBytes)
 		ln = ln - l
 		var d ScData
-		glog.Info(Message(t), l)
 		switch Message(t) {
 		case SC_CORE:
 			d = &ServerCoreData{}
@@ -565,7 +562,6 @@ func ReadConferenceCreateResponse(data []byte) []interface{} {
 				glog.Error("Unpack:", err)
 				return ret
 			}
-			glog.Infof("d:%+v", d)
 			ret = append(ret, d)
 		}
 	}

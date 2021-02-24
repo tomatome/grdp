@@ -275,6 +275,8 @@ func readConfirmActivePDU(r io.Reader) (*ConfirmActivePDU, error) {
 		}
 		p.CapabilitySets = append(p.CapabilitySets, c)
 	}
+	s, _ := core.ReadUInt32LE(r)
+	glog.Info("sessionid:", s)
 	return p, nil
 }
 
@@ -344,16 +346,20 @@ func readDataPDU(r io.Reader) (*DataPDU, error) {
 		d = &ErrorInfoDataPDU{}
 	case PDUTYPE2_FONTMAP:
 		d = &FontMapDataPDU{}
+	case PDUTYPE2_SAVE_SESSION_INFO:
+		d = &SaveSessionInfo{}
 	default:
 		err = errors.New(fmt.Sprintf("Unknown data pdu type2 0x%02x", header.PDUType2))
 		glog.Error(err)
 		return nil, err
 	}
+
 	err = struc.Unpack(r, d)
 	if err != nil {
-		glog.Error("read data pdu data error", err)
+		glog.Error("read data pdu error", err)
 		return nil, err
 	}
+	glog.Infof("%+v", d)
 	p := &DataPDU{
 		Header: header,
 		Data:   d,
@@ -419,6 +425,34 @@ type FontMapDataPDU struct {
 
 func (*FontMapDataPDU) Type2() uint8 {
 	return PDUTYPE2_FONTMAP
+}
+
+type InfoType uint32
+
+const (
+	INFOTYPE_LOGON               = 0x00000000
+	INFOTYPE_LOGON_LONG          = 0x00000001
+	INFOTYPE_LOGON_PLAINNOTIFY   = 0x00000002
+	INFOTYPE_LOGON_EXTENDED_INFO = 0x00000003
+)
+
+type LogonFields struct {
+	CbFileData uint32   `struc:"little"`
+	Len        uint32   //28 `struc:"little"`
+	Version    uint32   // 1 `struc:"little"`
+	LogonId    uint32   `struc:"little"`
+	random     [16]byte //16 `struc:"little"`
+}
+type SaveSessionInfo struct {
+	InfoType      uint32      `struc:"little"`
+	Length        uint16      `struc:"little"`
+	FieldsPresent uint32      `struc:"little"`
+	Logon         LogonFields `struc:"little"`
+	Pad           [570]byte   `struc:"little"`
+}
+
+func (*SaveSessionInfo) Type2() uint8 {
+	return PDUTYPE2_SAVE_SESSION_INFO
 }
 
 type PersistKeyPDU struct {
@@ -558,8 +592,8 @@ func readFastPathUpdatePDU(r io.Reader) (*FastPathUpdatePDU, error) {
 		}
 		d = fb
 	default:
-		glog.Debug("unsupported FastPathUpdatePDU data type", f.UpdateHeader)
-		return f, errors.New("unsupported data type")
+		//glog.Errorf("Unknown Fast Path PDU type 0x%x", f.UpdateHeader)
+		return f, errors.New(fmt.Sprintf("Unknown Fast Path PDU type 0x%x", f.UpdateHeader))
 		//d = nil
 	}
 	//if d != nil {
@@ -621,7 +655,7 @@ func readPDU(r io.Reader) (*PDU, error) {
 		glog.Debug("PDUTYPE_DEACTIVATEALLPDU")
 		d, err = readDeactiveAllPDU(r)
 	default:
-		glog.Error("PDU invalid pdu type")
+		glog.Errorf("PDU invalid pdu type: 0x%02x", pdu.ShareCtrlHeader.PDUType)
 	}
 	if err != nil {
 		return nil, err

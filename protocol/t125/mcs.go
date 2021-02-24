@@ -513,7 +513,6 @@ func (c *MCSClient) recvChannelJoinConfirm(s []byte) {
 	//}
 	//}
 	//}
-	glog.Info("confirm:", confirm)
 
 	c.connectChannels()
 }
