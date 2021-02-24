@@ -14,20 +14,9 @@ Forked from icodeface/grdp
 
 ## Example
 
-```golang
-client := grdp.NewClient("192.168.0.2:3389", glog.DEBUG)
-err := client.Login("Administrator", "123456")
-if err != nil {
-    fmt.Println("login failed,", err)
-} else {
-    fmt.Println("login success")
-}
-```
-or
-```
-on windows:
-启动example.exe, 浏览器访问8088端口。
-```
+1. build in example dir on linux or windows
+2. start example on port 8088
+3. http://localhost:8088
 
 ## Take ideas from
 
