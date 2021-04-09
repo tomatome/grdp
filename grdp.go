@@ -9,14 +9,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/icodeface/grdp/core"
-	"github.com/icodeface/grdp/glog"
-	"github.com/icodeface/grdp/protocol/nla"
-	"github.com/icodeface/grdp/protocol/pdu"
-	"github.com/icodeface/grdp/protocol/sec"
-	"github.com/icodeface/grdp/protocol/t125"
-	"github.com/icodeface/grdp/protocol/tpkt"
-	"github.com/icodeface/grdp/protocol/x224"
+	"github.com/tomatome/grdp/core"
+	"github.com/tomatome/grdp/glog"
+	"github.com/tomatome/grdp/protocol/nla"
+	"github.com/tomatome/grdp/protocol/pdu"
+	"github.com/tomatome/grdp/protocol/sec"
+	"github.com/tomatome/grdp/protocol/t125"
+	"github.com/tomatome/grdp/protocol/tpkt"
+	"github.com/tomatome/grdp/protocol/x224"
 )
 
 type Client struct {
