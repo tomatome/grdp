@@ -9,14 +9,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/icodeface/grdp/core"
-	"github.com/icodeface/grdp/glog"
-	"github.com/icodeface/grdp/protocol/nla"
-	"github.com/icodeface/grdp/protocol/pdu"
-	"github.com/icodeface/grdp/protocol/sec"
-	"github.com/icodeface/grdp/protocol/t125"
-	"github.com/icodeface/grdp/protocol/tpkt"
-	"github.com/icodeface/grdp/protocol/x224"
+	"github.com/tomatome/grdp/core"
+	"github.com/tomatome/grdp/glog"
+	"github.com/tomatome/grdp/protocol/nla"
+	"github.com/tomatome/grdp/protocol/pdu"
+	"github.com/tomatome/grdp/protocol/sec"
+	"github.com/tomatome/grdp/protocol/t125"
+	"github.com/tomatome/grdp/protocol/tpkt"
+	"github.com/tomatome/grdp/protocol/x224"
 )
 
 type Client struct {
@@ -40,7 +40,7 @@ func NewClient(host string, logLevel glog.LEVEL) *Client {
 func (g *Client) Login(domain, user, pwd string) error {
 	conn, err := net.DialTimeout("tcp", g.Host, 3*time.Second)
 	if err != nil {
-		return errors.New(fmt.Sprintf("[dial err] %v", err))
+		return fmt.Errorf("[dial err] %v", err)
 	}
 	defer conn.Close()
 	glog.Info(conn.LocalAddr().String())
@@ -65,7 +65,7 @@ func (g *Client) Login(domain, user, pwd string) error {
 
 	err = g.x224.Connect()
 	if err != nil {
-		return errors.New(fmt.Sprintf("[x224 connect err] %v", err))
+		return fmt.Errorf("[x224 connect err] %v", err)
 	}
 	glog.Info("wait connect ok")
 	wg := &sync.WaitGroup{}

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"sync"
 	"text/template"
 	"time"
 
@@ -24,8 +23,6 @@ import (
 	"github.com/tomatome/grdp/protocol/tpkt"
 	"github.com/tomatome/grdp/protocol/x224"
 )
-
-var im = 0
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -89,39 +86,24 @@ func socketIO() {
 		}).On("ready", func() {
 			fmt.Println("on ready")
 		}).On("update", func(rectangles []pdu.BitmapData) {
-			//s := so
 			glog.Info(time.Now(), "on update Bitmap:", len(rectangles))
-			bs := make([]Bitmap, 0, len(rectangles))
-			mu := sync.Mutex{}
-			wg := &sync.WaitGroup{}
+			//bs := make([]Bitmap, 0, len(rectangles))
 			for _, v := range rectangles {
-				wg.Add(1)
-				//go func(wg *sync.WaitGroup) {
 				IsCompress := v.IsCompress()
 				data := v.BitmapDataStream
-				glog.Info("data:", data)
-				b1 := Bitmap{v.DestLeft, v.DestTop, v.DestRight, v.DestBottom,
-					v.Width, v.Height, v.BitsPerPixel, IsCompress, data}
+				glog.Debug("data:", data)
+				//if IsCompress {
+				//data = decompress(&v)
+				//IsCompress = false
+				//}
 
-				so.Emit("rdp-bitmap", []Bitmap{b1})
-				if IsCompress {
-					data = decompress(&v)
-					IsCompress = false
-				}
-
-				glog.Info(IsCompress, v.BitsPerPixel)
+				glog.Debug(IsCompress, v.BitsPerPixel)
 				b := Bitmap{v.DestLeft, v.DestTop, v.DestRight, v.DestBottom,
 					v.Width, v.Height, v.BitsPerPixel, IsCompress, data}
 
-				mu.Lock()
 				so.Emit("rdp-bitmap", []Bitmap{b})
-				bs = append(bs, b)
-				mu.Unlock()
-				wg.Done()
-				//os.Exit(0)
-				//}(wg)
+				//bs = append(bs, b)
 			}
-			wg.Wait()
 			//so.Emit("rdp-bitmap", bs)
 		})
 	})
@@ -246,7 +228,7 @@ func (g *Client) Login(domain, user, pwd string, width, height uint16) error {
 	glog.Info("Connect:", g.Host, "with", domain+"\\"+user, ":", pwd)
 	conn, err := net.DialTimeout("tcp", g.Host, 3*time.Second)
 	if err != nil {
-		return errors.New(fmt.Sprintf("[dial err] %v", err))
+		return fmt.Errorf("[dial err] %v", err)
 	}
 	//defer conn.Close()
 
@@ -266,12 +248,12 @@ func (g *Client) Login(domain, user, pwd string, width, height uint16) error {
 	g.sec.SetFastPathListener(g.pdu)
 	g.pdu.SetFastPathSender(g.tpkt)
 
-	//g.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
-	g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
+	g.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
+	//g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
 
 	err = g.x224.Connect()
 	if err != nil {
-		return errors.New(fmt.Sprintf("[x224 connect err] %v", err))
+		return fmt.Errorf("[x224 connect err] %v", err)
 	}
 	glog.Info("wait connect ok")
 	return nil
