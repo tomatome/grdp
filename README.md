@@ -10,7 +10,8 @@ Forked from icodeface/grdp
 
 * [x] Standard RDP Authentication
 * [x] SSL Authentication
-* [ ] NLA Authentication（need test）
+* [ ] NLA Authentication(need test)
+* [ ] Client UI(ugly)
 
 ## Example
 
@@ -24,3 +25,4 @@ Forked from icodeface/grdp
 * [node-rdpjs](https://github.com/citronneur/node-rdpjs)
 * [gordp](https://github.com/Madnikulin50/gordp)
 * [ncrack_rdp](https://github.com/nmap/ncrack/blob/master/modules/ncrack_rdp.cc)
+* [webRDP](https://github.com/Chorder/webRDP)

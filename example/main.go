@@ -26,7 +26,10 @@ import (
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	socketIO()
+	//web example
+	//socketIO()
+	//client example
+	uiclient()
 }
 func showPreview(w http.ResponseWriter, r *http.Request) {
 	t, err := template.ParseFiles("static/html/index.html")
@@ -54,7 +57,7 @@ type Info struct {
 }
 
 func socketIO() {
-	server, _ := socketio.NewServer(nil)
+	server := socketio.NewServer(nil)
 	server.OnConnect("/", func(so socketio.Conn) error {
 		fmt.Println("OnConnect", so.ID())
 		so.Emit("rdp-connect", true)
@@ -87,24 +90,24 @@ func socketIO() {
 			fmt.Println("on ready")
 		}).On("update", func(rectangles []pdu.BitmapData) {
 			glog.Info(time.Now(), "on update Bitmap:", len(rectangles))
-			//bs := make([]Bitmap, 0, len(rectangles))
+			bs := make([]Bitmap, 0, len(rectangles))
 			for _, v := range rectangles {
 				IsCompress := v.IsCompress()
 				data := v.BitmapDataStream
 				glog.Debug("data:", data)
-				//if IsCompress {
-				//data = decompress(&v)
-				//IsCompress = false
-				//}
+				if IsCompress {
+					data = decompress(&v)
+					IsCompress = false
+				}
 
 				glog.Debug(IsCompress, v.BitsPerPixel)
-				b := Bitmap{v.DestLeft, v.DestTop, v.DestRight, v.DestBottom,
-					v.Width, v.Height, v.BitsPerPixel, IsCompress, data}
-
+				b := Bitmap{int(v.DestLeft), int(v.DestTop), int(v.DestRight), int(v.DestBottom),
+					int(v.Width), int(v.Height), int(v.BitsPerPixel), IsCompress, data}
+				ui_paint_bitmap(&b)
 				so.Emit("rdp-bitmap", []Bitmap{b})
-				//bs = append(bs, b)
+				bs = append(bs, b)
 			}
-			//so.Emit("rdp-bitmap", bs)
+			so.Emit("rdp-bitmap", bs)
 		})
 	})
 
@@ -248,8 +251,8 @@ func (g *Client) Login(domain, user, pwd string, width, height uint16) error {
 	g.sec.SetFastPathListener(g.pdu)
 	g.pdu.SetFastPathSender(g.tpkt)
 
-	g.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
-	//g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
+	//g.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
+	g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
 
 	err = g.x224.Connect()
 	if err != nil {
@@ -260,17 +263,21 @@ func (g *Client) Login(domain, user, pwd string, width, height uint16) error {
 }
 
 type Bitmap struct {
-	DestLeft     uint16 `json:"destLeft"`
-	DestTop      uint16 `json:"destTop"`
-	DestRight    uint16 `json:"destRight"`
-	DestBottom   uint16 `json:"destBottom"`
-	Width        uint16 `json:"width"`
-	Height       uint16 `json:"height"`
-	BitsPerPixel uint16 `json:"bitsPerPixel"`
+	DestLeft     int    `json:"destLeft"`
+	DestTop      int    `json:"destTop"`
+	DestRight    int    `json:"destRight"`
+	DestBottom   int    `json:"destBottom"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	BitsPerPixel int    `json:"bitsPerPixel"`
 	IsCompress   bool   `json:"isCompress"`
 	Data         []byte `json:"data"`
 }
+type ByteSlice []byte
 
+func (x ByteSlice) Len() int           { return len(x) }
+func (x ByteSlice) Less(i, j int) bool { return x[i] < x[j] }
+func (x ByteSlice) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 func decompress(bitmap *pdu.BitmapData) []byte {
 	var fName string
 	switch bitmap.BitsPerPixel {
@@ -289,148 +296,61 @@ func decompress(bitmap *pdu.BitmapData) []byte {
 	default:
 		glog.Error("invalid bitmap data format")
 	}
-	glog.Info(fName)
+	glog.Debug(fName)
 	input := bitmap.BitmapDataStream
 	glog.Info(bitmap.Width, bitmap.Height)
-	output := bitmap_decompress(input, bitmap.Width, bitmap.Height)
+	//glog.Info("input:", input)
+	//for _, v := range input {
+	//fmt.Printf("%d,", v)
+	//}
+	//fmt.Printf("\n")
+	output := bitmap_decompress(input, int(bitmap.Width), int(bitmap.Height), 4)
 
-	glog.Info("input:", input)
-	glog.Info("output:", output)
-	//os.Exit(0)
-
+	//sort.Reverse(ByteSlice(output))
+	//glog.Info("output:", output)
 	return output
 }
+func init() {
+	BitmapCH = make(chan *Bitmap, 100)
 
-func process_plane(in []byte, width, height int, out *[]byte, idx int) int {
-	var (
-		color     byte
-		x         byte
-		last_line *[]byte
-	)
+}
+func uiclient() {
+	screen := Screen{600, 800}
+	info := Info{".", "192.168.0.132", "6400", "administrator", "Jhadmin123", screen}
+	g := NewClient(fmt.Sprintf("%s:%s", info.Ip, info.Port), glog.INFO)
+	err := g.Login(info.Domain, info.Username, info.Passwd, info.Width, info.Height)
+	if err != nil {
+		fmt.Println("Login:", err)
+		return
+	}
+	g.pdu.On("error", func(e error) {
+		fmt.Println("on error:", e)
+		//wg.Done()
+	}).On("close", func() {
+		err = errors.New("close")
+		fmt.Println("on close")
+	}).On("success", func() {
+		fmt.Println("on success")
+	}).On("ready", func() {
+		fmt.Println("on ready")
+	}).On("update", func(rectangles []pdu.BitmapData) {
+		glog.Info(time.Now(), "on update Bitmap:", len(rectangles))
+		for _, v := range rectangles {
+			IsCompress := v.IsCompress()
+			data := v.BitmapDataStream
+			//glog.Info("data:", data)
+			if IsCompress {
+				data = decompress(&v)
+				IsCompress = false
+			}
 
-	indexh := 0
-	i := 0
-	j := idx
-	k := 0
-	for indexh < height {
-		j += width*height*4 - (indexh+1)*width*4
-		color = 0
-		this_line := (*out)[j:]
-		indexw := 0
-		if last_line == nil {
-			glog.Info("first", indexw, width)
-			for indexw < width {
-				code := in[i]
-				i++
-				k++
-				replen := code & 0xf
-				collen := (code >> 4) & 0xf
-				revcode := (replen << 4) | collen
-				glog.Info("first1", indexw, revcode, collen, replen)
-				if (revcode < 47) && (revcode >= 16) {
-					replen = revcode
-					collen = 0
-				}
-				glog.Info("first2", collen)
-				for collen > 0 {
-					color = in[i]
-					i++
-					k++
-					(*out)[j] = color
-					glog.Info("(*out)[j]", j, (*out)[j])
-					j += 4
-					indexw++
-					collen--
-				}
-				glog.Info("first3", replen)
-				for replen > 0 {
-					(*out)[j] = color
-					glog.Info("(*out)[j]", j, (*out)[j])
-					j += 4
-					indexw++
-					replen--
-				}
-			}
-			//glog.Info("out:", *out)
-		} else {
-			glog.Info("indexw", indexw, width, k, len(in))
-			for indexw < width && i < len(in)-1 {
-				code := in[i]
-				i++
-				k++
-				replen := code & 0xf
-				collen := (code >> 4) & 0xf
-				revcode := (replen << 4) | collen
-				glog.Info("code2", code, replen, collen, revcode)
-				if (revcode < 47) && (revcode >= 16) {
-					replen = revcode
-					collen = 0
-				}
-				glog.Info("2=", collen)
-				for collen > 0 && j < len(*last_line)-1 {
-					x = in[i]
-					i++
-					k++
-					glog.Info("x=", x, x&1, x>>1)
-					if x&1 != 0 {
-						x = x >> 1
-						x = x + 1
-						color = -x
-					} else {
-						x = x >> 1
-						color = x
-					}
-					glog.Info("color:", color)
-					x = (*last_line)[indexw*4] + color
-					glog.Info("(*out)[indexw*4]=", indexw*4, (*last_line)[indexw*4])
-					(*out)[j] = x
-					j += 4
-					indexw++
-					collen--
-				}
-				glog.Info("3=", replen)
-				for replen > 0 && j < len(*last_line)-1 {
-					x = (*last_line)[indexw*4] + color
-					(*out)[j] = x
-					glog.Infof("*out3[%d]=%v", j, (*out)[j])
-					j += 4
-					indexw++
-					replen--
-				}
-			}
+			//glog.Info(IsCompress, v.BitsPerPixel)
+			b := Bitmap{int(v.DestLeft), int(v.DestTop), int(v.DestRight), int(v.DestBottom),
+				int(v.Width), int(v.Height), int(v.BitsPerPixel), IsCompress, data}
+			//glog.Infof("b:%+v, %d==%d", b.DestLeft, len(b.Data), b.Width*b.Height*4)
+			ui_paint_bitmap(&b)
 		}
-		indexh++
-		last_line = &this_line
-	}
-	return k - 1
-}
-
-func bitmap_decompress(input []byte, width1, height1 uint16) []byte {
-	width, height := int(width1), int(height1)
-	output := make([]byte, width*height*4)
-	glog.Info(width, height, cap(output), len(input))
-	code := input[0]
-	if code != 0x10 {
-		return nil
-	}
-	org := input
-	total_pro := 1
-	input0 := org[total_pro:]
-	bytes_pro := process_plane(input0, width, height, &output, 3)
-	glog.Info("output1:", output)
-	glog.Info("total_pro:", total_pro, bytes_pro)
-	total_pro += bytes_pro
-	input0 = org[total_pro:]
-	bytes_pro = process_plane(input0, width, height, &output, 2)
-	glog.Info("total_pro:", total_pro, bytes_pro)
-	total_pro += bytes_pro
-	input0 = org[total_pro:]
-	bytes_pro = process_plane(input0, width, height, &output, 1)
-	glog.Info("total_pro:", total_pro, bytes_pro)
-	total_pro += bytes_pro
-	input0 = org[total_pro:]
-	bytes_pro = process_plane(input0, width, height, &output, 0)
-	glog.Info("total_pro:", total_pro, bytes_pro)
-	total_pro += bytes_pro
-	return output
+	})
+	initUI(g, int(screen.Width), int(screen.Height))
+	time.Sleep(10000 * time.Second)
 }
