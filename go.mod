@@ -3,6 +3,7 @@ module grdp
 go 1.16
 
 require (
+	github.com/go-gl/gl v0.0.0-20181026044259-55b76b7df9d2
 	github.com/googollee/go-socket.io v1.6.0
 	github.com/icodeface/grdp v0.0.0-20200414055757-e0008b0b5cb2
 	github.com/icodeface/tls v0.0.0-20190904083142-17aec93c60e5

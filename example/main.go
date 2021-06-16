@@ -103,7 +103,6 @@ func socketIO() {
 				glog.Debug(IsCompress, v.BitsPerPixel)
 				b := Bitmap{int(v.DestLeft), int(v.DestTop), int(v.DestRight), int(v.DestBottom),
 					int(v.Width), int(v.Height), int(v.BitsPerPixel), IsCompress, data}
-				ui_paint_bitmap(&b)
 				so.Emit("rdp-bitmap", []Bitmap{b})
 				bs = append(bs, b)
 			}
@@ -298,26 +297,26 @@ func decompress(bitmap *pdu.BitmapData) []byte {
 	}
 	glog.Debug(fName)
 	input := bitmap.BitmapDataStream
-	glog.Info(bitmap.Width, bitmap.Height)
-	//glog.Info("input:", input)
-	//for _, v := range input {
-	//fmt.Printf("%d,", v)
-	//}
-	//fmt.Printf("\n")
+	glog.Error(bitmap.Width, bitmap.Height)
+	glog.Error("input:")
+	for _, v := range input {
+		fmt.Printf("%d,", v)
+	}
+	fmt.Printf("\n")
 	output := bitmap_decompress(input, int(bitmap.Width), int(bitmap.Height), 4)
 
 	//sort.Reverse(ByteSlice(output))
-	//glog.Info("output:", output)
+	glog.Error("output:", output)
 	return output
 }
 func init() {
-	BitmapCH = make(chan *Bitmap, 100)
+	BitmapCH = make(chan []Bitmap, 100)
 
 }
 func uiclient() {
-	screen := Screen{600, 800}
+	screen := Screen{800, 1000}
 	info := Info{".", "192.168.0.132", "6400", "administrator", "Jhadmin123", screen}
-	g := NewClient(fmt.Sprintf("%s:%s", info.Ip, info.Port), glog.INFO)
+	g := NewClient(fmt.Sprintf("%s:%s", info.Ip, info.Port), glog.ERROR)
 	err := g.Login(info.Domain, info.Username, info.Passwd, info.Width, info.Height)
 	if err != nil {
 		fmt.Println("Login:", err)
@@ -325,7 +324,6 @@ func uiclient() {
 	}
 	g.pdu.On("error", func(e error) {
 		fmt.Println("on error:", e)
-		//wg.Done()
 	}).On("close", func() {
 		err = errors.New("close")
 		fmt.Println("on close")
@@ -335,6 +333,7 @@ func uiclient() {
 		fmt.Println("on ready")
 	}).On("update", func(rectangles []pdu.BitmapData) {
 		glog.Info(time.Now(), "on update Bitmap:", len(rectangles))
+		bs := make([]Bitmap, 0, len(rectangles))
 		for _, v := range rectangles {
 			IsCompress := v.IsCompress()
 			data := v.BitmapDataStream
@@ -348,8 +347,9 @@ func uiclient() {
 			b := Bitmap{int(v.DestLeft), int(v.DestTop), int(v.DestRight), int(v.DestBottom),
 				int(v.Width), int(v.Height), int(v.BitsPerPixel), IsCompress, data}
 			//glog.Infof("b:%+v, %d==%d", b.DestLeft, len(b.Data), b.Width*b.Height*4)
-			ui_paint_bitmap(&b)
+			bs = append(bs, b)
 		}
+		ui_paint_bitmap(bs)
 	})
 	initUI(g, int(screen.Width), int(screen.Height))
 	time.Sleep(10000 * time.Second)
