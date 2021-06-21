@@ -297,31 +297,33 @@ func decompress(bitmap *pdu.BitmapData) []byte {
 	}
 	glog.Debug(fName)
 	input := bitmap.BitmapDataStream
-	glog.Error(bitmap.Width, bitmap.Height)
-	glog.Error("input:")
-	for _, v := range input {
-		fmt.Printf("%d,", v)
-	}
-	fmt.Printf("\n")
+	//glog.Error(bitmap.Width, bitmap.Height)
+	//glog.Error("input:")
+	//for _, v := range input {
+	//fmt.Printf("%d,", v)
+	//}
+	//fmt.Printf("\n")
 	output := bitmap_decompress(input, int(bitmap.Width), int(bitmap.Height), 4)
 
 	//sort.Reverse(ByteSlice(output))
-	glog.Error("output:", output)
+	//glog.Error("output:", output)
 	return output
 }
 func init() {
-	BitmapCH = make(chan []Bitmap, 100)
+	BitmapCH = make(chan []Bitmap, 5000)
 
 }
 func uiclient() {
-	screen := Screen{800, 1000}
+	//runtime.GOMAXPROCS(runtime.NumCPU())
+	screen := Screen{600, 800}
 	info := Info{".", "192.168.0.132", "6400", "administrator", "Jhadmin123", screen}
-	g := NewClient(fmt.Sprintf("%s:%s", info.Ip, info.Port), glog.ERROR)
+	g := NewClient(fmt.Sprintf("%s:%s", info.Ip, info.Port), glog.INFO)
 	err := g.Login(info.Domain, info.Username, info.Passwd, info.Width, info.Height)
 	if err != nil {
 		fmt.Println("Login:", err)
 		return
 	}
+
 	g.pdu.On("error", func(e error) {
 		fmt.Println("on error:", e)
 	}).On("close", func() {
@@ -333,7 +335,7 @@ func uiclient() {
 		fmt.Println("on ready")
 	}).On("update", func(rectangles []pdu.BitmapData) {
 		glog.Info(time.Now(), "on update Bitmap:", len(rectangles))
-		bs := make([]Bitmap, 0, len(rectangles))
+		bs := make([]Bitmap, 0, 50)
 		for _, v := range rectangles {
 			IsCompress := v.IsCompress()
 			data := v.BitmapDataStream
@@ -352,5 +354,5 @@ func uiclient() {
 		ui_paint_bitmap(bs)
 	})
 	initUI(g, int(screen.Width), int(screen.Height))
-	time.Sleep(10000 * time.Second)
+	g.tpkt.Close()
 }

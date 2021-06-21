@@ -2,8 +2,9 @@
 package main
 
 import (
+	"image"
 	"image/color"
-	"runtime"
+	"image/draw"
 
 	"github.com/tfriedel6/canvas"
 	"github.com/tfriedel6/canvas/glfwcanvas"
@@ -13,11 +14,15 @@ import (
 
 var BitmapCH chan []Bitmap
 
+var ScreenImage *image.RGBA
+
 func ui_paint_bitmap(bs []Bitmap) {
 	BitmapCH <- bs
 }
+
 func initUI(g *Client, width, height int) {
-	runtime.LockOSThread()
+	ScreenImage = image.NewRGBA(image.Rect(0, 0, width, height))
+
 	wnd, cv, err := glfwcanvas.CreateWindow(width, height, "Hello")
 	if err != nil {
 		panic(err)
@@ -30,9 +35,8 @@ func initUI(g *Client, width, height int) {
 	wnd.MouseUp = g.MouseUp
 	wnd.MouseDown = g.MouseDown
 	wnd.MouseWheel = g.MouseWheel
-	//wnd.SizeChange = g.SizeChange
+
 	wnd.MainLoop(func() {
-		//fmt.Println("FPS:", wnd.FPS())
 		select {
 		case bs := <-BitmapCH:
 			paint_bitmap(cv, bs)
@@ -44,8 +48,7 @@ func initUI(g *Client, width, height int) {
 
 func paint_bitmap(cv *canvas.Canvas, bs []Bitmap) {
 	for _, b := range bs {
-		m := cv.GetImageData(0, 0, b.Width, b.Height)
-
+		m := image.NewRGBA(image.Rect(0, 0, b.Width, b.Height))
 		i := 0
 		for y := 0; y < b.Height; y++ {
 			for x := 0; x < b.Width; x++ {
@@ -54,14 +57,20 @@ func paint_bitmap(cv *canvas.Canvas, bs []Bitmap) {
 				m.Set(x, y, c)
 			}
 		}
-		cv.PutImageData(m, b.DestLeft, b.DestTop)
+		draw.Draw(ScreenImage, ScreenImage.Bounds().Add(image.Pt(b.DestLeft, b.DestTop)), m, m.Bounds().Min, draw.Src)
+		//cv.ClearRect(float64(b.DestLeft), float64(b.DestTop), float64(b.Width), float64(b.Height))
+		//cv.PutImageData(m, b.DestLeft, b.DestTop)
 	}
+
+	cv.ClearRect(float64(0), float64(0), float64(cv.Width()), float64(cv.Height()))
+	cv.PutImageData(ScreenImage, 0, 0)
 }
+
 func (g *Client) KeyUp(sc int, r rune, name string) {
 	glog.Info("KeyUp:", sc, "r:", r, "name:", name)
 
 	p := &pdu.ScancodeKeyEvent{}
-	p.KeyCode = uint16(r)
+	p.KeyCode = uint16(sc)
 	p.KeyboardFlags |= pdu.KBDFLAGS_RELEASE
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_SCANCODE, []pdu.InputEventsInterface{p})
 }
@@ -69,7 +78,7 @@ func (g *Client) KeyDown(sc int, r rune, name string) {
 	glog.Info("KeyDown:", sc, "r:", r, "name:", name)
 
 	p := &pdu.ScancodeKeyEvent{}
-	p.KeyCode = uint16(r)
+	p.KeyCode = uint16(sc)
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_SCANCODE, []pdu.InputEventsInterface{p})
 }
 
@@ -98,9 +107,9 @@ func (g *Client) MouseUp(button int, x, y int) {
 	switch button {
 	case 0:
 		p.PointerFlags |= pdu.PTRFLAGS_BUTTON1
-	case 2:
-		p.PointerFlags |= pdu.PTRFLAGS_BUTTON2
 	case 1:
+		p.PointerFlags |= pdu.PTRFLAGS_BUTTON2
+	case 2:
 		p.PointerFlags |= pdu.PTRFLAGS_BUTTON3
 	default:
 		p.PointerFlags |= pdu.PTRFLAGS_MOVE
@@ -119,9 +128,9 @@ func (g *Client) MouseDown(button int, x, y int) {
 	switch button {
 	case 0:
 		p.PointerFlags |= pdu.PTRFLAGS_BUTTON1
-	case 2:
-		p.PointerFlags |= pdu.PTRFLAGS_BUTTON2
 	case 1:
+		p.PointerFlags |= pdu.PTRFLAGS_BUTTON2
+	case 2:
 		p.PointerFlags |= pdu.PTRFLAGS_BUTTON3
 	default:
 		p.PointerFlags |= pdu.PTRFLAGS_MOVE
@@ -130,6 +139,4 @@ func (g *Client) MouseDown(button int, x, y int) {
 	p.XPos = uint16(x)
 	p.YPos = uint16(y)
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_MOUSE, []pdu.InputEventsInterface{p})
-}
-func (g *Client) SizeChange(w, h int) {
 }

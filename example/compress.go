@@ -833,7 +833,6 @@ func bitmap_decompress4(output *[]uint8, width, height int, input []uint8, size 
 	bytes_pro = process_plane(&input, width, height, output, 3)
 	total_pro += bytes_pro
 	//input = input[bytes_pro:]
-	fmt.Println("----------------------------------")
 	bytes_pro = process_plane(&input, width, height, output, 2)
 	total_pro += bytes_pro
 	//input = input[bytes_pro:]

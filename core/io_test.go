@@ -3,8 +3,9 @@ package core_test
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/icodeface/grdp/core"
 	"testing"
+
+	"github.com/tomatome/grdp/core"
 )
 
 func TestWriteUInt16LE(t *testing.T) {
