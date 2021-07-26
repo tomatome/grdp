@@ -1,4 +1,4 @@
-package grdp
+package main
 
 import (
 	"errors"
@@ -8,6 +8,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/tomatome/grdp/protocol/rfb"
 
 	"github.com/tomatome/grdp/core"
 	"github.com/tomatome/grdp/glog"
@@ -26,6 +28,7 @@ type Client struct {
 	mcs  *t125.MCSClient
 	sec  *sec.Client
 	pdu  *pdu.Client
+	vnc  *rfb.RFB
 }
 
 func NewClient(host string, logLevel glog.LEVEL) *Client {
@@ -91,4 +94,51 @@ func (g *Client) Login(domain, user, pwd string) error {
 
 	wg.Wait()
 	return err
+}
+
+func (g *Client) LoginVNC() error {
+	conn, err := net.DialTimeout("tcp", g.Host, 3*time.Second)
+	if err != nil {
+		return fmt.Errorf("[dial err] %v", err)
+	}
+	defer conn.Close()
+	glog.Info(conn.LocalAddr().String())
+	//domain := strings.Split(g.Host, ":")[0]
+
+	g.vnc = rfb.NewRFB(rfb.NewRFBConn(conn))
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+
+	g.vnc.On("error", func(e error) {
+		glog.Info("on error")
+		err = e
+		glog.Error(e)
+		wg.Done()
+	}).On("close", func() {
+		err = errors.New("close")
+		glog.Info("on close")
+		//wg.Done()
+	}).On("success", func() {
+		err = nil
+		glog.Info("on success")
+		//wg.Done()
+	}).On("ready", func() {
+		glog.Info("on ready")
+	}).On("update", func(b *rfb.BitRect) {
+		glog.Info("on update:", b)
+	})
+	glog.Info("on Wait")
+	wg.Wait()
+	return err
+}
+
+func main() {
+	//g := NewClient("192.168.18.107:3389", glog.DEBUG)
+	//err := g.Login("", "wren", "wren")
+	g := NewClient("192.168.18.100:5902", glog.DEBUG)
+	err := g.LoginVNC()
+	if err != nil {
+		fmt.Println("Login:", err)
+	}
+
 }

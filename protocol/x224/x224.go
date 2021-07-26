@@ -152,7 +152,7 @@ func New(t core.Transport) *X224 {
 	x := &X224{
 		*emission.NewEmitter(),
 		t,
-		PROTOCOL_SSL | PROTOCOL_HYBRID,
+		PROTOCOL_RDP | PROTOCOL_SSL | PROTOCOL_HYBRID,
 		PROTOCOL_SSL,
 		NewDataHeader(),
 	}
@@ -256,7 +256,7 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 		glog.Info("*** NLA Security selected ***")
 		err := x.transport.(*tpkt.TPKT).StartNLA()
 		if err != nil {
-			glog.Error("start NLA failed", err)
+			glog.Error("start NLA failed:", err)
 			return
 		}
 		x.Emit("connect", x.selectedProtocol)

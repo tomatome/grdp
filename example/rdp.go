@@ -2,10 +2,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"log"
 	"net"
-	"os"
+	"runtime"
 	"time"
 
 	"github.com/tomatome/grdp/core"
@@ -25,10 +25,11 @@ const (
 	PROTOCOL_HYBRID_EX = x224.PROTOCOL_HYBRID_EX
 )
 
-type Client struct {
+type RdpClient struct {
 	Host   string // ip:port
 	Width  int
 	Height int
+	info   *Info
 	tpkt   *tpkt.TPKT
 	x224   *x224.X224
 	mcs    *t125.MCSClient
@@ -36,20 +37,64 @@ type Client struct {
 	pdu    *pdu.Client
 }
 
-func NewClient(host string, width, height int, logLevel glog.LEVEL) *Client {
-	glog.SetLevel(logLevel)
-	logger := log.New(os.Stdout, "", 0)
-	glog.SetLogger(logger)
-	return &Client{
+func NewRdpClient(host string, width, height int, logLevel glog.LEVEL) *RdpClient {
+	return &RdpClient{
 		Host:   host,
 		Width:  width,
 		Height: height,
 	}
 }
-func (g *Client) SetRequestedProtocol(p uint32) {
+func (g *RdpClient) SetRequestedProtocol(p uint32) {
 	g.x224.SetRequestedProtocol(p)
 }
-func (g *Client) Login(domain, user, pwd string) error {
+
+func uiRdp(info *Info) (error, *RdpClient) {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	BitmapCH = make(chan []Bitmap, 500)
+	g := NewRdpClient(fmt.Sprintf("%s:%s", info.Ip, info.Port), info.Width, info.Height, glog.INFO)
+	g.info = info
+	err := g.Login()
+	if err != nil {
+		fmt.Println("Login:", err)
+		return err, nil
+	}
+
+	g.pdu.On("error", func(e error) {
+		fmt.Println("on error:", e)
+	}).On("close", func() {
+		err = errors.New("close")
+		fmt.Println("on close")
+	}).On("success", func() {
+		fmt.Println("on success")
+	}).On("ready", func() {
+		fmt.Println("on ready")
+	}).On("update", func(rectangles []pdu.BitmapData) {
+		glog.Info(time.Now(), "on update Bitmap:", len(rectangles))
+		bs := make([]Bitmap, 0, 50)
+		for _, v := range rectangles {
+			IsCompress := v.IsCompress()
+			data := v.BitmapDataStream
+			//glog.Info("data:", data)
+			if IsCompress {
+				data = decompress(&v)
+				IsCompress = false
+			}
+
+			//glog.Info(IsCompress, v.BitsPerPixel)
+			b := Bitmap{int(v.DestLeft), int(v.DestTop), int(v.DestRight), int(v.DestBottom),
+				int(v.Width), int(v.Height), Bpp(v.BitsPerPixel), IsCompress, data}
+			//glog.Infof("b:%+v, %d==%d", b.DestLeft, len(b.Data), b.Width*b.Height*4)
+			bs = append(bs, b)
+		}
+		ui_paint_bitmap(bs)
+	})
+
+	return nil, g
+}
+
+func (g *RdpClient) Login() error {
+	domain, user, pwd := g.info.Domain, g.info.Username, g.info.Passwd
 	glog.Info("Connect:", g.Host, "with", domain+"\\"+user, ":", pwd)
 	conn, err := net.DialTimeout("tcp", g.Host, 3*time.Second)
 	if err != nil {
@@ -74,7 +119,7 @@ func (g *Client) Login(domain, user, pwd string) error {
 	g.pdu.SetFastPathSender(g.tpkt)
 
 	//g.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
-	g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
+	//g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
 
 	err = g.x224.Connect()
 	if err != nil {
@@ -84,40 +129,7 @@ func (g *Client) Login(domain, user, pwd string) error {
 	return nil
 }
 
-type Bitmap struct {
-	DestLeft     int    `json:"destLeft"`
-	DestTop      int    `json:"destTop"`
-	DestRight    int    `json:"destRight"`
-	DestBottom   int    `json:"destBottom"`
-	Width        int    `json:"width"`
-	Height       int    `json:"height"`
-	BitsPerPixel int    `json:"bitsPerPixel"`
-	IsCompress   bool   `json:"isCompress"`
-	Data         []byte `json:"data"`
-}
-
-func decompress(bitmap *pdu.BitmapData) []byte {
-	pixel := 4
-	switch bitmap.BitsPerPixel {
-	case 15:
-		pixel = 1
-
-	case 16:
-		pixel = 2
-
-	case 24:
-		pixel = 3
-
-	case 32:
-		pixel = 4
-
-	default:
-		glog.Error("invalid bitmap data format")
-	}
-
-	return bitmap_decompress(bitmap.BitmapDataStream, int(bitmap.Width), int(bitmap.Height), pixel)
-}
-func (g *Client) KeyUp(sc int, name string) {
+func (g *RdpClient) KeyUp(sc int, name string) {
 	glog.Debug("KeyUp:", sc, "name:", name)
 
 	p := &pdu.ScancodeKeyEvent{}
@@ -125,7 +137,7 @@ func (g *Client) KeyUp(sc int, name string) {
 	p.KeyboardFlags |= pdu.KBDFLAGS_RELEASE
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_SCANCODE, []pdu.InputEventsInterface{p})
 }
-func (g *Client) KeyDown(sc int, name string) {
+func (g *RdpClient) KeyDown(sc int, name string) {
 	glog.Debug("KeyDown:", sc, "name:", name)
 
 	p := &pdu.ScancodeKeyEvent{}
@@ -133,7 +145,7 @@ func (g *Client) KeyDown(sc int, name string) {
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_SCANCODE, []pdu.InputEventsInterface{p})
 }
 
-func (g *Client) MouseMove(x, y int) {
+func (g *RdpClient) MouseMove(x, y int) {
 	glog.Debug("MouseMove", x, ":", y)
 	p := &pdu.PointerEvent{}
 	p.PointerFlags |= pdu.PTRFLAGS_MOVE
@@ -142,7 +154,7 @@ func (g *Client) MouseMove(x, y int) {
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_MOUSE, []pdu.InputEventsInterface{p})
 }
 
-func (g *Client) MouseWheel(scroll, x, y int) {
+func (g *RdpClient) MouseWheel(scroll, x, y int) {
 	glog.Info("MouseWheel", x, ":", y)
 	p := &pdu.PointerEvent{}
 	p.PointerFlags |= pdu.PTRFLAGS_WHEEL
@@ -151,7 +163,7 @@ func (g *Client) MouseWheel(scroll, x, y int) {
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_SCANCODE, []pdu.InputEventsInterface{p})
 }
 
-func (g *Client) MouseUp(button int, x, y int) {
+func (g *RdpClient) MouseUp(button int, x, y int) {
 	glog.Debug("MouseUp", x, ":", y, ":", button)
 	p := &pdu.PointerEvent{}
 
@@ -170,7 +182,7 @@ func (g *Client) MouseUp(button int, x, y int) {
 	p.YPos = uint16(y)
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_MOUSE, []pdu.InputEventsInterface{p})
 }
-func (g *Client) MouseDown(button int, x, y int) {
+func (g *RdpClient) MouseDown(button int, x, y int) {
 	glog.Info("MouseDown:", x, ":", y, ":", button)
 	p := &pdu.PointerEvent{}
 

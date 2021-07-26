@@ -1,7 +1,11 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
+	"unsafe"
+
+	"github.com/tomatome/grdp/protocol/pdu"
 )
 
 func CVAL(p *[]uint8) int {
@@ -10,36 +14,28 @@ func CVAL(p *[]uint8) int {
 	return a
 }
 
-// #define UNROLL8(exp) { exp exp exp exp exp exp exp exp }
+func CVAL2(p *[]uint8, v *uint16) {
+	*v = *((*uint16)(unsafe.Pointer(&(*p)[0])))
+	//*v = binary.BigEndian.Uint16((*p)[0:2])
+	//fmt.Println("*v:", *v)
+	*p = (*p)[2:]
+}
 
-// func REPEAT(statement) \
-// {
-// 	while((count & ~0x7) && ((x+8) < width)) \
-// 		statement; count--; x++;
-// 		statement; count--; x++;
-// 		statement; count--; x++;
-// 		statement; count--; x++;
-// 		statement; count--; x++;
-// 		statement; count--; x++;
-// 		statement; count--; x++;
-// 		statement; count--; x++;
+func REPEAT(f func(), count, x *int, width int) {
+	for (*count & ^0x7) != 0 && ((*x + 8) < width) {
+		for i := 0; i < 8; i++ {
+			f()
+			*count = *count - 1
+			*x = *x + 1
+		}
+	}
 
-// 	while((count > 0) && (x < width)){
-// 		statement;
-// 		count--;
-// 		x++;
-// 	}
-// }
-
-// #define MASK_UPDATE() \
-// { \
-// 	mixmask <<= 1; \
-// 	if (mixmask == 0) \
-// 	{ \
-// 		mask = fom_mask ? fom_mask : CVAL(input); \
-// 		mixmask = 1; \
-// 	} \
-// }
+	for (*count > 0) && (*x < width) {
+		f()
+		*count = *count - 1
+		*x = *x + 1
+	}
+}
 
 // /* 1 byte bitmap decompress */
 // func bitmap_decompress1(uint8 * output, int width, int height, uint8 * input, int size) bool{
@@ -53,14 +49,12 @@ func CVAL(p *[]uint8) int {
 // 	uint8 mix = 0xff;
 // 	int fom_mask = 0;
 
-// 	while (input < end)
-// 	{
+// 	for (input < end){
 // 		fom_mask = 0;
 // 		code = CVAL(input);
 // 		opcode = code >> 4;
 // 		/* Handle different opcode forms */
-// 		switch (opcode)
-// 		{
+// 		switch (opcode){
 // 			case 0xc:
 // 			case 0xd:
 // 			case 0xe:
@@ -70,13 +64,10 @@ func CVAL(p *[]uint8) int {
 // 				break;
 // 			case 0xf:
 // 				opcode = code & 0xf;
-// 				if (opcode < 9)
-// 				{
+// 				if (opcode < 9){
 // 					count = CVAL(input);
 // 					count |= CVAL(input) << 8;
-// 				}
-// 				else
-// 				{
+// 				}else{
 // 					count = (opcode < 0xb) ? 8 : 1;
 // 				}
 // 				offset = 0;
@@ -88,27 +79,23 @@ func CVAL(p *[]uint8) int {
 // 				break;
 // 		}
 // 		/* Handle strange cases for counts */
-// 		if (offset != 0)
-// 		{
+// 		if (offset != 0){
 // 			isfillormix = ((opcode == 2) || (opcode == 7));
-// 			if (count == 0)
-// 			{
+// 			if (count == 0){
 // 				if (isfillormix)
 // 					count = CVAL(input) + 1;
 // 				else
 // 					count = CVAL(input) + offset;
-// 			}
-// 			else if (isfillormix)
-// 			{
+// 			}else if (isfillormix){
 // 				count <<= 3;
 // 			}
 // 		}
 // 		/* Read preliminary data */
-// 		switch (opcode)
-// 		{
+// 		switch (opcode){
 // 			case 0:	/* Fill */
-// 				if ((lastopcode == opcode) && !((x == width) && (prevline == NULL)))
+// 				if ((lastopcode == opcode) && !((x == width) && (prevline == NULL))){
 // 					insertmix = true;
+//                }
 // 				break;
 // 			case 8:	/* Bicolour */
 // 				colour1 = CVAL(input);
@@ -134,10 +121,8 @@ func CVAL(p *[]uint8) int {
 // 		lastopcode = opcode;
 // 		mixmask = 0;
 // 		/* Output body */
-// 		while (count > 0)
-// 		{
-// 			if (x >= width)
-// 			{
+// 		for (count > 0){
+// 			if (x >= width){
 // 				if (height <= 0)
 // 					return false;
 // 				x = 0;
@@ -145,11 +130,9 @@ func CVAL(p *[]uint8) int {
 // 				prevline = line;
 // 				line = output + height * width;
 // 			}
-// 			switch (opcode)
-// 			{
+// 			switch (opcode){
 // 				case 0:	/* Fill */
-// 					if (insertmix)
-// 					{
+// 					if (insertmix){
 // 						if (prevline == NULL)
 // 							line[x] = mix;
 // 						else
@@ -158,28 +141,21 @@ func CVAL(p *[]uint8) int {
 // 						count--;
 // 						x++;
 // 					}
-// 					if (prevline == NULL)
-// 					{
+// 					if (prevline == NULL){
 // 						REPEAT(line[x] = 0)
-// 					}
-// 					else
-// 					{
+// 					}else{
 // 						REPEAT(line[x] = prevline[x])
 // 					}
 // 					break;
 // 				case 1:	/* Mix */
-// 					if (prevline == NULL)
-// 					{
+// 					if (prevline == NULL){
 // 						REPEAT(line[x] = mix)
-// 					}
-// 					else
-// 					{
+// 					}else{
 // 						REPEAT(line[x] = prevline[x] ^ mix)
 // 					}
 // 					break;
 // 				case 2:	/* Fill or Mix */
-// 					if (prevline == NULL)
-// 					{
+// 					if (prevline == NULL){
 // 						REPEAT
 // 						(
 // 							MASK_UPDATE();
@@ -188,9 +164,7 @@ func CVAL(p *[]uint8) int {
 // 							else
 // 								line[x] = 0;
 // 						)
-// 					}
-// 					else
-// 					{
+// 					}else{
 // 						REPEAT
 // 						(
 // 							MASK_UPDATE();
@@ -237,202 +211,256 @@ func CVAL(p *[]uint8) int {
 // 	return true;
 // }
 
-// /* 2 byte bitmap decompress */
-// func bitmap_decompress2(uint8 * output, int width, int height, uint8 * input, int size)bool{
-// 	uint8 *end = input + size;
-// 	uint16 *prevline = NULL, *line = NULL;
-// 	int opcode, count, offset, isfillormix, x = width;
-// 	int lastopcode = -1, insertmix = false, bicolour = false;
-// 	uint8 code;
-// 	uint16 colour1 = 0, colour2 = 0;
-// 	uint8 mixmask, mask = 0;
-// 	uint16 mix = 0xffff;
-// 	int fom_mask = 0;
+func UInt16BE(data uint16) (uint8, uint8) {
+	b := make([]byte, 2)
+	binary.BigEndian.PutUint16(b, data)
+	return uint8(b[1]), uint8(b[0])
+}
 
-// 	while (input < end)
-// 	{
-// 		fom_mask = 0;
-// 		code = CVAL(input);
-// 		opcode = code >> 4;
-// 		/* Handle different opcode forms */
-// 		switch (opcode)
-// 		{
-// 			case 0xc:
-// 			case 0xd:
-// 			case 0xe:
-// 				opcode -= 6;
-// 				count = code & 0xf;
-// 				offset = 16;
-// 				break;
-// 			case 0xf:
-// 				opcode = code & 0xf;
-// 				if (opcode < 9)
-// 				{
-// 					count = CVAL(input);
-// 					count |= CVAL(input) << 8;
-// 				}
-// 				else
-// 				{
-// 					count = (opcode < 0xb) ? 8 : 1;
-// 				}
-// 				offset = 0;
-// 				break;
-// 			default:
-// 				opcode >>= 1;
-// 				count = code & 0x1f;
-// 				offset = 32;
-// 				break;
-// 		}
-// 		/* Handle strange cases for counts */
-// 		if (offset != 0)
-// 		{
-// 			isfillormix = ((opcode == 2) || (opcode == 7));
-// 			if (count == 0)
-// 			{
-// 				if (isfillormix)
-// 					count = CVAL(input) + 1;
-// 				else
-// 					count = CVAL(input) + offset;
-// 			}
-// 			else if (isfillormix)
-// 			{
-// 				count <<= 3;
-// 			}
-// 		}
-// 		/* Read preliminary data */
-// 		switch (opcode)
-// 		{
-// 			case 0:	/* Fill */
-// 				if ((lastopcode == opcode) && !((x == width) && (prevline == NULL)))
-// 					insertmix = true;
-// 				break;
-// 			case 8:	/* Bicolour */
-// 				CVAL2(input, colour1);
-// 			case 3:	/* Colour */
-// 				CVAL2(input, colour2);
-// 				break;
-// 			case 6:	/* SetMix/Mix */
-// 			case 7:	/* SetMix/FillOrMix */
-// 				CVAL2(input, mix);
-// 				opcode -= 5;
-// 				break;
-// 			case 9:	/* FillOrMix_1 */
-// 				mask = 0x03;
-// 				opcode = 0x02;
-// 				fom_mask = 3;
-// 				break;
-// 			case 0x0a:	/* FillOrMix_2 */
-// 				mask = 0x05;
-// 				opcode = 0x02;
-// 				fom_mask = 5;
-// 				break;
-// 		}
-// 		lastopcode = opcode;
-// 		mixmask = 0;
-// 		/* Output body */
-// 		while (count > 0)
-// 		{
-// 			if (x >= width)
-// 			{
-// 				if (height <= 0)
-// 					return false;
-// 				x = 0;
-// 				height--;
-// 				prevline = line;
-// 				line = ((uint16 *) output) + height * width;
-// 			}
-// 			switch (opcode)
-// 			{
-// 				case 0:	/* Fill */
-// 					if (insertmix)
-// 					{
-// 						if (prevline == NULL)
-// 							line[x] = mix;
-// 						else
-// 							line[x] = prevline[x] ^ mix;
-// 						insertmix = false;
-// 						count--;
-// 						x++;
-// 					}
-// 					if (prevline == NULL)
-// 					{
-// 						REPEAT(line[x] = 0)
-// 					}
-// 					else
-// 					{
-// 						REPEAT(line[x] = prevline[x])
-// 					}
-// 					break;
-// 				case 1:	/* Mix */
-// 					if (prevline == NULL)
-// 					{
-// 						REPEAT(line[x] = mix)
-// 					}
-// 					else
-// 					{
-// 						REPEAT(line[x] = prevline[x] ^ mix)
-// 					}
-// 					break;
-// 				case 2:	/* Fill or Mix */
-// 					if (prevline == NULL)
-// 					{
-// 						REPEAT
-// 						(
-// 							MASK_UPDATE();
-// 							if (mask & mixmask)
-// 								line[x] = mix;
-// 							else
-// 								line[x] = 0;
-// 						)
-// 					}
-// 					else
-// 					{
-// 						REPEAT
-// 						(
-// 							MASK_UPDATE();
-// 							if (mask & mixmask)
-// 								line[x] = prevline[x] ^ mix;
-// 							else
-// 								line[x] = prevline[x];
-// 						)
-// 					}
-// 					break;
-// 				case 3:	/* Colour */
-// 					REPEAT(line[x] = colour2)
-// 					break;
-// 				case 4:	/* Copy */
-// 					REPEAT(CVAL2(input, line[x]))
-// 					break;
-// 				case 8:	/* Bicolour */
-// 					REPEAT
-// 					(
-// 						if (bicolour)
-// 						{
-// 							line[x] = colour2;
-// 							bicolour = false;
-// 						}
-// 						else
-// 						{
-// 							line[x] = colour1;
-// 							bicolour = true;
-// 							count++;
-// 						}
-// 					)
-// 					break;
-// 				case 0xd:	/* White */
-// 					REPEAT(line[x] = 0xffff)
-// 					break;
-// 				case 0xe:	/* Black */
-// 					REPEAT(line[x] = 0)
-// 					break;
-// 				default:
-// 					fmt.Printf("bitmap opcode 0x%x\n", opcode);
-// 					return false;
-// 			}
-// 		}
-// 	}
-// 	return true;
-// }
+// /* 2 byte bitmap decompress */
+func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size int) bool {
+	var (
+		prevline, line                   int
+		opcode, count, offset, code      int
+		x                                int = width
+		lastopcode                       int = -1
+		insertmix, bicolour, isfillormix bool
+		mixmask, mask                    uint8
+		colour1, colour2                 uint16
+		mix                              uint16 = 0xffff
+		fom_mask                         uint8
+		input                            = &input1
+	)
+
+	out1 := make([]uint16, width*height)
+	out := &out1
+	k := 0
+	for len(*input) != 0 {
+		k++
+		fom_mask = 0
+		//fmt.Printf("input=%v\n", *input)
+		code = CVAL(input)
+		opcode = code >> 4
+		//fmt.Printf("k=%d,opcode=%d\n", k, opcode)
+		/* Handle different opcode forms */
+		switch opcode {
+		case 0xc:
+			fallthrough
+		case 0xd:
+			fallthrough
+		case 0xe:
+			opcode -= 6
+			count = code & 0xf
+			offset = 16
+			break
+		case 0xf:
+			opcode = code & 0xf
+			if opcode < 9 {
+				count = CVAL(input)
+				count |= CVAL(input) << 8
+			} else {
+				count = 1
+				if opcode < 0xb {
+					count = 8
+				}
+			}
+			offset = 0
+			break
+		default:
+			opcode >>= 1
+			count = code & 0x1f
+			offset = 32
+			break
+		}
+
+		//fmt.Println("offset:", offset, "count:", count)
+		/* Handle strange cases for counts */
+		if offset != 0 {
+			isfillormix = ((opcode == 2) || (opcode == 7))
+			if count == 0 {
+				if isfillormix {
+					count = CVAL(input) + 1
+				} else {
+					count = CVAL(input) + offset
+				}
+			} else if isfillormix {
+				count <<= 3
+			}
+		}
+		/* Read preliminary data */
+		//fmt.Println("opcode1:", opcode, "input:", (*input)[0])
+		switch opcode {
+		case 0: /* Fill */
+			if (lastopcode == opcode) && !((x == width) && (prevline == 0)) {
+				insertmix = true
+			}
+			break
+		case 8: /* Bicolour */
+			CVAL2(input, &colour1)
+			CVAL2(input, &colour2)
+			break
+		case 3: /* Colour */
+			CVAL2(input, &colour2)
+			break
+		case 6: /* SetMix/Mix */
+			fallthrough
+		case 7: /* SetMix/FillOrMix */
+			CVAL2(input, &mix)
+			opcode -= 5
+			break
+		case 9: /* FillOrMix_1 */
+			mask = 0x03
+			opcode = 0x02
+			fom_mask = 3
+			break
+		case 0x0a: /* FillOrMix_2 */
+			mask = 0x05
+			opcode = 0x02
+			fom_mask = 5
+			break
+		}
+		lastopcode = opcode
+		mixmask = 0
+		/* Output body */
+		//fmt.Println("count:", count, "opcode:", opcode)
+		for count > 0 {
+			if x >= width {
+				if height <= 0 {
+					return false
+				}
+
+				x = 0
+				height--
+				prevline = line
+				line = height * width
+			}
+			//fmt.Println("prevline:", prevline, "x:", x, "line:", line)
+			//fmt.Printf("e1input=%v\n", *input)
+			switch opcode {
+			case 0: /* Fill */
+				if insertmix {
+					if prevline == 0 {
+						(*out)[x+line] = mix
+					} else {
+						(*out)[x+line] = (*out)[prevline+x] ^ mix
+					}
+					insertmix = false
+					count--
+					x++
+				}
+				if prevline == 0 {
+					REPEAT(func() {
+						(*out)[x+line] = 0
+					}, &count, &x, width)
+				} else {
+					//fmt.Printf("prevline[%d]=%d\n", prevline+x, (*out)[prevline+x])
+					REPEAT(func() {
+						(*out)[x+line] = (*out)[prevline+x]
+					}, &count, &x, width)
+				}
+				break
+			case 1: /* Mix */
+				if prevline == 0 {
+					REPEAT(func() {
+						(*out)[x+line] = mix
+					}, &count, &x, width)
+				} else {
+					REPEAT(func() {
+						(*out)[x+line] = (*out)[prevline+x] ^ mix
+					}, &count, &x, width)
+				}
+				break
+			case 2: /* Fill or Mix */
+				if prevline == 0 {
+					REPEAT(func() {
+						mixmask <<= 1
+						if mixmask == 0 {
+							mask = fom_mask
+							if fom_mask == 0 {
+								mask = uint8(CVAL(input))
+								mixmask = 1
+							}
+						}
+						if mask&mixmask != 0 {
+							(*out)[x+line] = mix
+						} else {
+							(*out)[x+line] = 0
+						}
+						//fmt.Printf("(*out)0[%d]: %d\n", x+line, (*out)[x+line])
+					}, &count, &x, width)
+				} else {
+					REPEAT(func() {
+						//fmt.Printf("mask1: %d\n", mixmask)
+						mixmask = mixmask << 1
+						//fmt.Printf("mask2: %d, fom_mask=%d\n", mixmask, fom_mask)
+						if mixmask == 0 {
+							mask = fom_mask
+							if fom_mask == 0 {
+								mask = uint8(CVAL(input))
+								mixmask = 1
+							}
+						}
+						//fmt.Printf("mask&mixmask: %d\n", mask&mixmask)
+						if mask&mixmask != 0 {
+							(*out)[x+line] = (*out)[prevline+x] ^ mix
+						} else {
+							(*out)[x+line] = (*out)[prevline+x]
+						}
+						//fmt.Printf("(*out)1[%d]: %d\n", x+line, (*out)[x+line])
+						//fmt.Printf("einput=%v\n", *input)
+					}, &count, &x, width)
+				}
+				break
+			case 3: /* Colour */
+				REPEAT(func() {
+					(*out)[x+line] = colour2
+				}, &count, &x, width)
+				break
+			case 4: /* Copy */
+				REPEAT(func() {
+					var a uint16
+					CVAL2(input, &a)
+					(*out)[x+line] = a
+					//fmt.Printf("(*out)[%d]: %d\n", x+line, (*out)[x+line])
+				}, &count, &x, width)
+
+				break
+			case 8: /* Bicolour */
+				REPEAT(func() {
+					if bicolour {
+						(*out)[x+line] = colour2
+						bicolour = false
+					} else {
+						(*out)[x+line] = colour1
+						bicolour = true
+						count++
+					}
+				}, &count, &x, width)
+
+				break
+			case 0xd: /* White */
+				REPEAT(func() {
+					(*out)[x+line] = 0xffff
+				}, &count, &x, width)
+				break
+			case 0xe: /* Black */
+				REPEAT(func() {
+					(*out)[x+line] = 0
+				}, &count, &x, width)
+				break
+			default:
+				fmt.Printf("bitmap opcode 0x%x\n", opcode)
+				return false
+			}
+		}
+	}
+	j := 0
+	for _, v := range *out {
+		(*output)[j], (*output)[j+1] = UInt16BE(v)
+		j += 2
+	}
+	return true
+}
 
 // /* 3 byte bitmap decompress */
 // func bitmap_decompress3(uint8 * output, int width, int height, uint8 * input, int size)bool{
@@ -845,27 +873,31 @@ func bitmap_decompress4(output *[]uint8, width, height int, input []uint8, size 
 }
 
 /* main decompress function */
-
 func bitmap_decompress(input []uint8, width, height int, Bpp int) []uint8 {
 	//rv := false
-	output := make([]uint8, width*height*4)
+	size := width * height * Bpp
+	output := make([]uint8, size)
 	switch Bpp {
 	case 1:
 		//rv = bitmap_decompress1(output, width, height, input, size)
 		break
 	case 2:
-		//rv = bitmap_decompress2(output, width, height, input, size)
+		bitmap_decompress2(&output, width, height, input, size)
 		break
 	case 3:
 		//rv = bitmap_decompress3(output, width, height, input, size)
 		break
 	case 4:
-		bitmap_decompress4(&output, width, height, input, width*height*Bpp)
+		bitmap_decompress4(&output, width, height, input, size)
 		break
 	default:
 		fmt.Printf("Bpp %d\n", Bpp)
 		break
 	}
-	//fmt.Printf("rv %t\n", rv)
+	//fmt.Printf("output:%v\n", output)
 	return output
+}
+func decompress(bitmap *pdu.BitmapData) []byte {
+	pixel := Bpp(bitmap.BitsPerPixel)
+	return bitmap_decompress(bitmap.BitmapDataStream, int(bitmap.Width), int(bitmap.Height), pixel)
 }

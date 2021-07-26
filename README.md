@@ -12,6 +12,7 @@ Forked from icodeface/grdp
 * [x] SSL Authentication
 * [ ] NLA Authentication(need test)
 * [ ] Client UI(ugly)
+* [ ] VNC client(unfinished)
 
 ## Example
 

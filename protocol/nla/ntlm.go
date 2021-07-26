@@ -68,17 +68,17 @@ type Message interface {
 }
 
 type NegotiateMessage struct {
-	Signature               [8]byte
-	MessageType             uint32 `struc:"little"`
-	NegotiateFlags          uint32 `struc:"little"`
-	DomainNameLen           uint16 `struc:"little"`
-	DomainNameMaxLen        uint16 `struc:"little"`
-	DomainNameBufferOffset  uint32 `struc:"little"`
-	WorkstationLen          uint16 `struc:"little"`
-	WorkstationMaxLen       uint16 `struc:"little"`
-	WorkstationBufferOffset uint32 `struc:"little"`
-	Varsion                 NVersion
-	Payload                 []byte `struc:"skip"`
+	Signature               [8]byte  `struc:"little"`
+	MessageType             uint32   `struc:"little"`
+	NegotiateFlags          uint32   `struc:"little"`
+	DomainNameLen           uint16   `struc:"little"`
+	DomainNameMaxLen        uint16   `struc:"little"`
+	DomainNameBufferOffset  uint32   `struc:"little"`
+	WorkstationLen          uint16   `struc:"little"`
+	WorkstationMaxLen       uint16   `struc:"little"`
+	WorkstationBufferOffset uint32   `struc:"little"`
+	Version                 NVersion `struc:"little"`
+	Payload                 [32]byte `struc:"skip"`
 }
 
 func NewNegotiateMessage() *NegotiateMessage {
@@ -199,17 +199,22 @@ func NewAuthenticateMessage(negFlag uint32, domain, user, workstation string,
 	}
 	payloadBuff := &bytes.Buffer{}
 
-	domainBytes := UnicodeEncode(domain)
+	domainBytes := []byte(domain)
+	userBytes := []byte(user)
+	wsBytes := []byte(workstation)
+	if negFlag&NTLMSSP_NEGOTIATE_UNICODE != 0 {
+		domainBytes = UnicodeEncode(domain)
+		userBytes = UnicodeEncode(user)
+		wsBytes = UnicodeEncode(workstation)
+	}
 	msg.DomainNameLen = uint16(len(domainBytes))
 	msg.DomainNameBufferOffset = msg.BaseLen()
 	payloadBuff.Write(domainBytes)
 
-	userBytes := UnicodeEncode(user)
 	msg.UserNameLen = uint16(len(userBytes))
 	msg.UserNameBufferOffset = msg.DomainNameBufferOffset + uint32(msg.DomainNameLen)
 	payloadBuff.Write(userBytes)
 
-	wsBytes := UnicodeEncode(workstation)
 	msg.WorkstationLen = uint16(len(wsBytes))
 	msg.WorkstationBufferOffset = msg.UserNameBufferOffset + uint32(msg.UserNameLen)
 	payloadBuff.Write(wsBytes)
@@ -364,10 +369,6 @@ func (n *NTLMv2) GetAuthenticateMessage(s []byte) (*AuthenticateMessage, *NTLMv2
 	EncryptedRandomSessionKey := make([]byte, len(exportedSessionKey))
 	rc, _ := rc4.NewCipher(exchangeKey)
 	rc.XORKeyStream(EncryptedRandomSessionKey, exportedSessionKey)
-
-	if challengeMsg.NegotiateFlags&NTLMSSP_NEGOTIATE_UNICODE != 0 {
-		glog.Info("need unicode")
-	}
 
 	n.authenticateMessage = NewAuthenticateMessage(challengeMsg.NegotiateFlags,
 		n.domain, n.user, "", lmChallengeResponse, ntChallengeResponse, EncryptedRandomSessionKey)

@@ -82,12 +82,13 @@ func (t *TPKT) recvChallenge(data []byte) error {
 		glog.Info("DecodeDERTRequest", err)
 		return err
 	}
-
+	glog.Infof("tsreq:%+v", tsreq)
 	// get pubkey
 	pubkey, _ := t.Conn.TlsPubKey()
 	authMsg, ntlmSec := t.ntlm.GetAuthenticateMessage(tsreq.NegoTokens[0].Data)
 	t.ntlmSec = ntlmSec
 	encryptPubkey := ntlmSec.GssEncrypt(pubkey)
+	//fmt.Println(authMsg, encryptPubkey)
 	req := nla.EncodeDERTRequest([]nla.Message{authMsg}, nil, encryptPubkey)
 
 	_, err = t.Conn.Write(req)
@@ -95,10 +96,11 @@ func (t *TPKT) recvChallenge(data []byte) error {
 		glog.Info("send AuthenticateMessage", err)
 		return err
 	}
-
+	fmt.Println("wait Read")
 	resp := make([]byte, 1024)
 	n, err := t.Conn.Read(resp)
 	if err != nil {
+		glog.Error("Read:", err)
 		return fmt.Errorf("read %s", err)
 	} else {
 		glog.Info("Read success")

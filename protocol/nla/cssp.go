@@ -15,7 +15,7 @@ type TSRequest struct {
 	NegoTokens []NegoToken `asn1:"optional,explicit,tag:1"`
 	AuthInfo   string      `asn1:"optional,explicit,tag:2"`
 	PubKeyAuth string      `asn1:"optional,explicit,tag:3"`
-	ErrorCode  int         `asn1:"optional,explicit,tag:4"`
+	//ErrorCode  int         `asn1:"optional,explicit,tag:4"`
 }
 
 type TSCredentials struct {

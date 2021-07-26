@@ -34,13 +34,15 @@ func socketIO() {
 		return nil
 	})
 	server.OnEvent("/", "infos", func(so socketio.Conn, data interface{}) {
+		fmt.Println("infos", so.ID())
 		var info Info
 		v, _ := json.Marshal(data)
 		json.Unmarshal(v, &info)
 		fmt.Println(so.ID(), "logon infos:", info)
 
-		g := NewClient(fmt.Sprintf("%s:%s", info.Ip, info.Port), info.Width, info.Height, glog.INFO)
-		err := g.Login(info.Domain, info.Username, info.Passwd)
+		g := NewRdpClient(fmt.Sprintf("%s:%s", info.Ip, info.Port), info.Width, info.Height, glog.INFO)
+		g.info = &info
+		err := g.Login()
 		if err != nil {
 			fmt.Println("Login:", err)
 			so.Emit("rdp-error", "{\"code\":1,\"message\":\""+err.Error()+"\"}")
@@ -66,8 +68,8 @@ func socketIO() {
 				data := v.BitmapDataStream
 				glog.Debug("data:", data)
 				if IsCompress {
-					data = decompress(&v)
-					IsCompress = false
+					//data = decompress(&v)
+					//IsCompress = false
 				}
 
 				glog.Debug(IsCompress, v.BitsPerPixel)
@@ -100,7 +102,7 @@ func socketIO() {
 
 		p.XPos = x
 		p.YPos = y
-		g := so.Context().(*Client)
+		g := so.Context().(*RdpClient)
 		g.pdu.SendInputEvents(pdu.INPUT_EVENT_MOUSE, []pdu.InputEventsInterface{p})
 	})
 
@@ -113,7 +115,7 @@ func socketIO() {
 		if !isPressed {
 			p.KeyboardFlags |= pdu.KBDFLAGS_RELEASE
 		}
-		g := so.Context().(*Client)
+		g := so.Context().(*RdpClient)
 		g.pdu.SendInputEvents(pdu.INPUT_EVENT_SCANCODE, []pdu.InputEventsInterface{p})
 
 	})
@@ -135,7 +137,7 @@ func socketIO() {
 		p.PointerFlags |= (step & pdu.WheelRotationMask)
 		p.XPos = x
 		p.YPos = y
-		g := so.Context().(*Client)
+		g := so.Context().(*RdpClient)
 		g.pdu.SendInputEvents(pdu.INPUT_EVENT_SCANCODE, []pdu.InputEventsInterface{p})
 	})
 
@@ -144,7 +146,7 @@ func socketIO() {
 			return
 		}
 		fmt.Println("error:", err)
-		g := so.Context().(*Client)
+		g := so.Context().(*RdpClient)
 		if g != nil {
 			g.tpkt.Close()
 		}
@@ -158,7 +160,7 @@ func socketIO() {
 		fmt.Println("OnDisconnect:", s)
 		so.Emit("rdp-error", "{code:1,message:"+s+"}")
 
-		g := so.Context().(*Client)
+		g := so.Context().(*RdpClient)
 		if g != nil {
 			g.tpkt.Close()
 		}

@@ -4,13 +4,23 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"os"
 	"runtime"
 	"strings"
+
+	"github.com/tomatome/grdp/glog"
 )
 
 var (
 	server bool
 )
+
+func init() {
+	glog.SetLevel(glog.DEBUG)
+	logger := log.New(os.Stdout, "", 0)
+	glog.SetLogger(logger)
+}
 
 func main() {
 	flag.BoolVar(&server, "s", false, "web server")
@@ -23,8 +33,9 @@ func main() {
 	} else {
 		//client example
 		StartUI(800, 600)
+		//TestHard()
+		//TestSum()
 	}
-
 }
 
 type Screen struct {
