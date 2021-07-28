@@ -33,40 +33,43 @@ func appMain(driver gxui.Driver) {
 	theme := light.CreateTheme(driver)
 	window := theme.CreateWindow(width, height, "MSTSC")
 	window.SetScale(flags.DefaultScaleFactor)
+
 	img = theme.CreateImage()
-	//img.SetMargin(math.Spacing{0, 0, 0, 10})
+	layoutImg := theme.CreateLinearLayout()
+	layoutImg.SetSizeMode(gxui.Fill)
+	layoutImg.SetHorizontalAlignment(gxui.AlignCenter)
+	layoutImg.AddChild(img)
+	layoutImg.SetVisible(false)
 	ScreenImage = image.NewRGBA(image.Rect(0, 0, width, height))
-	//texture := driver.CreateTexture(ScreenImage, 1)
-	//img.SetTexture(texture)
-	img.SetVisible(false)
-	img.OnMouseDown(func(e gxui.MouseEvent) {
+	layoutImg.OnMouseDown(func(e gxui.MouseEvent) {
 		gc.MouseDown(int(e.Button), e.Point.X, e.Point.Y)
 	})
-	img.OnMouseUp(func(e gxui.MouseEvent) {
+	layoutImg.OnMouseUp(func(e gxui.MouseEvent) {
 		gc.MouseUp(int(e.Button), e.Point.X, e.Point.Y)
 	})
-	img.OnMouseMove(func(e gxui.MouseEvent) {
+	layoutImg.OnMouseMove(func(e gxui.MouseEvent) {
 		//gc.MouseMove(e.Point.X, e.Point.Y)
 	})
-	img.OnMouseScroll(func(e gxui.MouseEvent) {
+	layoutImg.OnMouseScroll(func(e gxui.MouseEvent) {
 		//gc.MouseWheel(e.ScrollY, e.Point.X, e.Point.Y)
 	})
-	img.OnKeyDown(func(e gxui.KeyboardEvent) {
-		fmt.Println("OnKeyDown:", e)
-		gc.KeyDown(int(e.Key), "")
-	})
-	img.OnKeyUp(func(e gxui.KeyboardEvent) {
-		fmt.Println("OnKeyUp:", e)
-		gc.KeyUp(int(e.Key), "")
-	})
-	/*window.OnKeyDown(func(e gxui.KeyboardEvent) {
-		fmt.Println("window OnKeyDown:", int(translateKeyboardKey(e.Key)))
-		gc.KeyDown(int(translateKeyboardKey(e.Key)), "")
+	window.OnKeyDown(func(e gxui.KeyboardEvent) {
+		fmt.Println("layoutImg OnKeyDown:", int(e.Key))
+		key := int(e.Key)
+		if key == 52 {
+			key = 65293
+		}
+		gc.KeyDown(key, "")
 	})
 	window.OnKeyUp(func(e gxui.KeyboardEvent) {
-		fmt.Println("window OnKeyUp:", int(translateKeyboardKey(e.Key)))
-		gc.KeyUp(int(translateKeyboardKey(e.Key)), "")
-	})*/
+		fmt.Println("layoutImg OnKeyUp:", int(e.Key))
+		key := int(e.Key)
+		if key == 52 {
+			key = 65293
+		}
+		gc.KeyUp(key, "")
+	})
+
 	layout := theme.CreateLinearLayout()
 	layout.SetSizeMode(gxui.Fill)
 	layout.SetHorizontalAlignment(gxui.AlignCenter)
@@ -102,8 +105,9 @@ func appMain(driver gxui.Driver) {
 			fmt.Println(err.Error())
 			return
 		}
+		glog.Info("ok:", gc)
 		layout.SetVisible(false)
-		img.SetVisible(true)
+		layoutImg.SetVisible(true)
 	})
 	bcancel := theme.CreateButton()
 	bcancel.SetText("Clear")
@@ -127,8 +131,11 @@ func appMain(driver gxui.Driver) {
 	//layout.AddChild(blayout)
 
 	window.AddChild(layout)
-	window.AddChild(img)
-	window.OnClose(driver.Terminate)
+	window.AddChild(layoutImg)
+	window.OnClose(func() {
+		gc.Close()
+		driver.Terminate()
+	})
 	update()
 }
 
@@ -152,10 +159,8 @@ func update() {
 
 func paint_bitmap(bs []Bitmap) {
 	for _, b := range bs {
-		//m := image.NewRGBA(image.Rect(0, 0, b.Width, b.Height))
-		m := image.NewRGBA(image.Rect(0, 0, b.DestRight-b.DestLeft, b.DestBottom-b.DestTop))
+		m := image.NewRGBA(image.Rect(0, 0, b.Width, b.Height))
 		i := 0
-		glog.Infof("b:%+v", b)
 		if b.BitsPerPixel == 2 {
 			for y := 0; y < b.Height; y++ {
 				for x := 0; x < b.Width; x++ {
@@ -164,21 +169,17 @@ func paint_bitmap(bs []Bitmap) {
 					b1[1] = b.Data[i]
 					colour := binary.BigEndian.Uint16(b1)
 
-					//red := ((colour >> 8) & 0xf8) | ((colour >> 13) & 0x7)
-					//green := ((colour >> 3) & 0xfc) | ((colour >> 9) & 0x3)
-					//blue := ((colour << 3) & 0xf8) | ((colour >> 2) & 0x7)
 					c := color.RGBA64{colour, colour, colour, 0xffff}
-					//c1 := color.RGBA{b.Data[i+1], b.Data[i+1], b.Data[i+1], 255}
+					//c := color.RGBA{b.Data[i+1], b.Data[i+1], b.Data[i+1], 255}
 					i += 2
 					m.Set(x, y, c)
-					//m.Set(x, y, c1)
 				}
 			}
 
 		} else {
 			for y := 0; y < b.Height; y++ {
 				for x := 0; x < b.Width; x++ {
-					c := color.RGBA{b.Data[i], b.Data[i+1], b.Data[i+2], b.Data[i+3]}
+					c := color.RGBA{b.Data[i+2], b.Data[i+1], b.Data[i], 255}
 					i += 4
 					m.Set(x, y, c)
 				}
@@ -265,6 +266,7 @@ type Control interface {
 	MouseWheel(scroll, x, y int)
 	MouseUp(button int, x, y int)
 	MouseDown(button int, x, y int)
+	Close()
 }
 
 /*func translateKeyboardKey(in gxui.KeyboardKey) int {

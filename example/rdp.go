@@ -203,3 +203,8 @@ func (g *RdpClient) MouseDown(button int, x, y int) {
 	p.YPos = uint16(y)
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_MOUSE, []pdu.InputEventsInterface{p})
 }
+func (g *RdpClient) Close() {
+	if g.tpkt != nil {
+		g.tpkt.Close()
+	}
+}

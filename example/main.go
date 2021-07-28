@@ -17,7 +17,7 @@ var (
 )
 
 func init() {
-	glog.SetLevel(glog.DEBUG)
+	glog.SetLevel(glog.INFO)
 	logger := log.New(os.Stdout, "", 0)
 	glog.SetLogger(logger)
 }
@@ -32,7 +32,7 @@ func main() {
 		socketIO()
 	} else {
 		//client example
-		StartUI(800, 600)
+		StartUI(1024, 768)
 		//TestHard()
 		//TestSum()
 	}
