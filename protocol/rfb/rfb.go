@@ -6,6 +6,7 @@ import (
 	"crypto/des"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"net"
 
@@ -37,11 +38,6 @@ type RFBConn struct {
 	s       *ServerInit
 	NbRect  uint16
 	BitRect *BitRect
-}
-type BitRect struct {
-	Rect *Rectangle
-	Pf   *PixelFormat
-	Data []byte
 }
 
 func NewRFBConn(s net.Conn) *RFBConn {
@@ -166,29 +162,27 @@ func (fc *RFBConn) recvSecurityResult(s []byte, err error) {
 		return
 	}
 	buff := &bytes.Buffer{}
-	core.WriteUInt8(0, buff)
+	core.WriteUInt8(0, buff) //share
 	fc.Write(buff.Bytes())
 	core.StartReadBytes(20, fc, fc.recvServerInit)
 }
 
 type ServerInit struct {
-	Width       uint16      `struc:"little"`
-	Height      uint16      `struc:"little"`
-	PixelFormat PixelFormat `struc:"little"`
+	Width       uint16       `struc:"little"`
+	Height      uint16       `struc:"little"`
+	PixelFormat *PixelFormat `struc:"little"`
 }
 
 func (fc *RFBConn) recvServerInit(s []byte, err error) {
 	glog.Debug("RFBConn recvServerInit", len(s), err)
 	r := bytes.NewReader(s)
-	serverInit := &ServerInit{}
-	err = struc.Unpack(r, serverInit)
-	if err != nil {
-		fc.Emit("error", err)
-		return
-	}
-	glog.Infof("serverInit:%+v", serverInit)
-	fc.s = serverInit
-	fc.BitRect.Pf = &serverInit.PixelFormat
+	si := &ServerInit{}
+	si.Width, err = core.ReadUint16BE(r)
+	si.Height, err = core.ReadUint16BE(r)
+	si.PixelFormat = ReadPixelFormat(r)
+	glog.Infof("serverInit:%+v, %+v", si, si.PixelFormat)
+	fc.s = si
+	fc.BitRect.Pf = si.PixelFormat
 	core.StartReadBytes(4, fc, fc.checkServerName)
 }
 func (fc *RFBConn) checkServerName(s []byte, err error) {
@@ -209,19 +203,20 @@ func (fc *RFBConn) recvServerName(s []byte, err error) {
 }
 
 func (fc *RFBConn) sendPixelFormat() {
+	glog.Debug("sendPixelFormat")
 	buff := &bytes.Buffer{}
 	core.WriteUInt8(0, buff)
 	core.WriteUInt16BE(0, buff)
 	core.WriteUInt8(0, buff)
-	err := struc.Pack(buff, fc.s.PixelFormat)
+	err := struc.Pack(buff, NewPixelFormat())
 	if err != nil {
 		fc.Emit("error", err)
 		return
 	}
-
 	fc.Write(buff.Bytes())
 }
 func (fc *RFBConn) sendSetEncoding() {
+	glog.Debug("sendSetEncoding")
 	buff := &bytes.Buffer{}
 	core.WriteUInt8(2, buff)
 	core.WriteUInt8(0, buff)
@@ -243,6 +238,7 @@ func (fc *RFBConn) sendFramebufferUpdateRequest(Incremental uint8,
 	Y uint16,
 	Width uint16,
 	Height uint16) {
+	glog.Debug("sendFramebufferUpdateRequest")
 	buff := &bytes.Buffer{}
 	core.WriteUInt8(3, buff)
 	core.WriteUInt8(Incremental, buff)
@@ -260,7 +256,7 @@ func (fc *RFBConn) recvServerOrder(s []byte, err error) {
 	case 0:
 		core.StartReadBytes(3, fc, fc.recvFrameBufferUpdateHeader)
 	case 2:
-		//core.StartReadBytes(4, fc, fc.recvServerName)
+		//TODO
 	case 3:
 		core.StartReadBytes(7, fc, fc.recvServerCutTextHeader)
 	default:
@@ -268,35 +264,60 @@ func (fc *RFBConn) recvServerOrder(s []byte, err error) {
 	}
 
 }
+
+type BitRect struct {
+	Rects []Rectangles
+	Pf    *PixelFormat
+}
+
+type Rectangles struct {
+	Rect *Rectangle
+	Data []byte
+}
+
 func (fc *RFBConn) recvFrameBufferUpdateHeader(s []byte, err error) {
 	glog.Debug("RFBConn recvFrameBufferUpdateHeader", hex.EncodeToString(s), err)
 	r := bytes.NewReader(s)
 	core.ReadUInt8(r)
 	NbRect, _ := core.ReadUint16BE(r)
 	fc.NbRect = NbRect
+	fc.BitRect.Rects = make([]Rectangles, fc.NbRect)
+	if NbRect == 0 {
+		return
+	}
 	glog.Info("NbRect:", NbRect)
 	core.StartReadBytes(12, fc, fc.recvRectHeader)
 }
+
+type Rectangle struct {
+	X        uint16 `struc:"little"`
+	Y        uint16 `struc:"little"`
+	Width    uint16 `struc:"little"`
+	Height   uint16 `struc:"little"`
+	Encoding uint32 `struc:"little"`
+}
+
 func (fc *RFBConn) recvRectHeader(s []byte, err error) {
 	glog.Debug("RFBConn recvRectHeader", hex.EncodeToString(s), err)
 	r := bytes.NewReader(s)
-	rect := &Rectangle{}
-	err = struc.Unpack(r, rect)
-	if err != nil {
-		fc.Emit("error", err)
-		return
-	}
-	fc.BitRect.Rect = rect
+	x, err := core.ReadUint16BE(r)
+	y, err := core.ReadUint16BE(r)
+	w, err := core.ReadUint16BE(r)
+	h, err := core.ReadUint16BE(r)
+	e, err := core.ReadUInt32BE(r)
+	rect := &Rectangle{x, y, w, h, e}
+
+	fc.BitRect.Rects[fc.NbRect-1].Rect = rect
 	glog.Infof("rect:%+v, len=%d", rect, int(rect.Width)*int(rect.Height)*4)
-	core.StartReadBytes(int(fc.s.Width)*int(fc.s.Height)*4, fc, fc.recvRectBody)
+	core.StartReadBytes(int(rect.Width)*int(rect.Height)*4, fc, fc.recvRectBody)
 }
 func (fc *RFBConn) recvRectBody(s []byte, err error) {
 	glog.Debug("RFBConn recvRectBody", hex.EncodeToString(s), err)
-	fc.BitRect.Data = s
-	fc.Emit("update", fc.BitRect)
+	fc.BitRect.Rects[fc.NbRect-1].Data = s
 	fc.NbRect--
 	glog.Info("fc.NbRect:", fc.NbRect)
 	if fc.NbRect == 0 {
+		fc.Emit("update", fc.BitRect)
 		fc.sendFramebufferUpdateRequest(1, 0, 0, fc.s.Width, fc.s.Height)
 		core.StartReadBytes(1, fc, fc.recvServerOrder)
 	} else {
@@ -330,30 +351,41 @@ func (fc *RFBConn) recvServerCutTextBody(s []byte, err error) {
 type PixelFormat struct {
 	BitsPerPixel  uint8  `struc:"little"`
 	Depth         uint8  `struc:"little"`
-	BigEndianFlag bool   `struc:"little"`
-	TrueColorFlag bool   `struc:"little"`
+	BigEndianFlag uint8  `struc:"little"`
+	TrueColorFlag uint8  `struc:"little"`
 	RedMax        uint16 `struc:"little"`
 	GreenMax      uint16 `struc:"little"`
 	BlueMax       uint16 `struc:"little"`
 	RedShift      uint8  `struc:"little"`
 	GreenShift    uint8  `struc:"little"`
 	BlueShift     uint8  `struc:"little"`
-	padding       []byte `struc:"little"`
+	Padding       uint16 `struc:"little"`
+	Padding1      uint8  `struc:"little"`
 }
 
+func ReadPixelFormat(r io.Reader) *PixelFormat {
+	p := NewPixelFormat()
+	p.BitsPerPixel, _ = core.ReadUInt8(r)
+	p.Depth, _ = core.ReadUInt8(r)
+	p.BigEndianFlag, _ = core.ReadUInt8(r)
+	p.TrueColorFlag, _ = core.ReadUInt8(r)
+	p.RedMax, _ = core.ReadUint16BE(r)
+	p.GreenMax, _ = core.ReadUint16BE(r)
+	p.BlueMax, _ = core.ReadUint16BE(r)
+	p.RedShift, _ = core.ReadUInt8(r)
+	p.GreenShift, _ = core.ReadUInt8(r)
+	p.BlueShift, _ = core.ReadUInt8(r)
+	p.Padding, _ = core.ReadUint16BE(r)
+	p.Padding1, _ = core.ReadUInt8(r)
+
+	return p
+}
 func NewPixelFormat() *PixelFormat {
 	return &PixelFormat{
-		32, 24, false, true, 255, 255, 255, 16, 8, 0, nil,
+		32, 24, 0, 1, 65280, 65280, 65280, 16, 8, 0, 0, 0,
 	}
 }
 
-type Rectangle struct {
-	X        uint16 `struc:"little"`
-	Y        uint16 `struc:"little"`
-	Width    uint16 `struc:"little"`
-	Height   uint16 `struc:"little"`
-	Encoding uint32 `struc:"little"`
-}
 type RFB struct {
 	core.Transport
 	Version       string
@@ -378,7 +410,53 @@ func (fb *RFB) recvProtocolVersion(version string) {
 		version = RFB003008
 	}
 	glog.Infof("version:%s", version)
-	buff := &bytes.Buffer{}
-	buff.WriteString(version)
-	fb.Write(buff.Bytes())
+	b := &bytes.Buffer{}
+	b.WriteString(version)
+	fb.Write(b.Bytes())
+}
+
+type KeyEvent struct {
+	DownFlag uint8  `struc:"little"`
+	Padding  uint16 `struc:"little"`
+	Key      uint32 `struc:"little"`
+}
+
+func (fb *RFB) SendKeyEvent(k *KeyEvent) {
+	b := &bytes.Buffer{}
+	core.WriteUInt8(4, b)
+	core.WriteUInt8(k.DownFlag, b)
+	core.WriteUInt16BE(k.Padding, b)
+	core.WriteUInt32BE(k.Key, b)
+	fmt.Println(b.Bytes())
+	fb.Write(b.Bytes())
+}
+
+type PointerEvent struct {
+	Mask uint8  `struc:"little"`
+	XPos uint16 `struc:"little"`
+	YPos uint16 `struc:"little"`
+}
+
+func (fb *RFB) SendPointEvent(p *PointerEvent) {
+	b := &bytes.Buffer{}
+	core.WriteUInt8(5, b)
+	core.WriteUInt8(p.Mask, b)
+	core.WriteUInt16BE(p.XPos, b)
+	core.WriteUInt16BE(p.YPos, b)
+	fmt.Println(b.Bytes())
+	fb.Write(b.Bytes())
+}
+
+type ClientCutText struct {
+	Padding  uint16 `struc:"little"`
+	Padding1 uint8  `struc:"little"`
+	Size     uint32 `struc:"little"`
+	Message  string `struc:"little"`
+}
+
+func (fb *RFB) SendClientCutText(t *ClientCutText) {
+	b := &bytes.Buffer{}
+	core.WriteUInt8(6, b)
+	struc.Pack(b, t)
+	fb.Write(b.Bytes())
 }

@@ -33,8 +33,6 @@ func main() {
 	} else {
 		//client example
 		StartUI(1024, 768)
-		//TestHard()
-		//TestSum()
 	}
 }
 

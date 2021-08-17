@@ -85,10 +85,12 @@ func (t *TPKT) recvChallenge(data []byte) error {
 	glog.Infof("tsreq:%+v", tsreq)
 	// get pubkey
 	pubkey, _ := t.Conn.TlsPubKey()
+	fmt.Printf("pubkey=%+v\n", pubkey)
 	authMsg, ntlmSec := t.ntlm.GetAuthenticateMessage(tsreq.NegoTokens[0].Data)
 	t.ntlmSec = ntlmSec
 	encryptPubkey := ntlmSec.GssEncrypt(pubkey)
-	//fmt.Println(authMsg, encryptPubkey)
+	fmt.Printf("authMsg=%+v\n", authMsg)
+	fmt.Printf("encryptPubkey=%+v\n", encryptPubkey)
 	req := nla.EncodeDERTRequest([]nla.Message{authMsg}, nil, encryptPubkey)
 
 	_, err = t.Conn.Write(req)

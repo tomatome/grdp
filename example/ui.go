@@ -53,7 +53,7 @@ func appMain(driver gxui.Driver) {
 	layoutImg.OnMouseScroll(func(e gxui.MouseEvent) {
 		//gc.MouseWheel(e.ScrollY, e.Point.X, e.Point.Y)
 	})
-	window.OnKeyDown(func(e gxui.KeyboardEvent) {
+	layoutImg.OnKeyDown(func(e gxui.KeyboardEvent) {
 		fmt.Println("layoutImg OnKeyDown:", int(e.Key))
 		key := int(e.Key)
 		if key == 52 {
@@ -61,7 +61,7 @@ func appMain(driver gxui.Driver) {
 		}
 		gc.KeyDown(key, "")
 	})
-	window.OnKeyUp(func(e gxui.KeyboardEvent) {
+	layoutImg.OnKeyUp(func(e gxui.KeyboardEvent) {
 		fmt.Println("layoutImg OnKeyUp:", int(e.Key))
 		key := int(e.Key)
 		if key == 52 {
@@ -83,8 +83,8 @@ func appMain(driver gxui.Driver) {
 	ip.SetDesiredWidth(width / 4)
 	user.SetDesiredWidth(width / 4)
 	passwd.SetDesiredWidth(width / 4)
-	ip.SetText("192.168.18.100:5902")
-	//ip.SetText("192.168.18.107:3389")
+	//ip.SetText("192.168.18.100:5902")
+	ip.SetText("192.168.18.107:3389")
 	//user.SetText("administrator")
 	user.SetText("wren")
 	//passwd.SetText("Jhadmin123")
@@ -208,7 +208,7 @@ func uiClient(info *Info) (error, Control) {
 		err error
 		g   Control
 	)
-	if !true {
+	if true {
 		err, g = uiRdp(info)
 	} else {
 		err, g = uiVnc(info)
