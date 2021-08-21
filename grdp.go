@@ -89,7 +89,7 @@ func (g *Client) Login(domain, user, pwd string) error {
 	}).On("ready", func() {
 		glog.Info("on ready")
 	}).On("update", func(rectangles []pdu.BitmapData) {
-		glog.Info("on update:")
+		glog.Info("on update:", rectangles)
 	})
 
 	wg.Wait()
@@ -133,10 +133,10 @@ func (g *Client) LoginVNC() error {
 }
 
 func main() {
-	//g := NewClient("192.168.18.107:3389", glog.DEBUG)
-	//err := g.Login("", "wren", "wren")
-	g := NewClient("192.168.18.100:5902", glog.DEBUG)
-	err := g.LoginVNC()
+	g := NewClient("192.168.18.107:3389", glog.DEBUG)
+	err := g.Login("", "wren", "wren")
+	//g := NewClient("192.168.18.100:5902", glog.DEBUG)
+	//err := g.LoginVNC()
 	if err != nil {
 		fmt.Println("Login:", err)
 	}

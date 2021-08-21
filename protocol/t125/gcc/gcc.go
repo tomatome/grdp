@@ -392,12 +392,12 @@ func (p *X509CertificateChain) Unpack(r io.Reader) error {
 type ServerCoreData struct {
 	RdpVersion              VERSION `struc:"uint32,little"`
 	ClientRequestedProtocol uint32  `struc:"little"`
-	//EarlyCapabilityFlags    uint32  `struc:"little"`
+	EarlyCapabilityFlags    uint32  `struc:"little"`
 }
 
 func NewServerCoreData() *ServerCoreData {
 	return &ServerCoreData{
-		RDP_VERSION_5_PLUS, 0}
+		RDP_VERSION_5_PLUS, 0, 0}
 }
 
 func (d *ServerCoreData) Serialize() []byte {
@@ -564,6 +564,7 @@ func ReadConferenceCreateResponse(data []byte) []interface{} {
 			}
 			ret = append(ret, d)
 		}
+		glog.Infof("d:%+v", d)
 	}
 
 	return ret

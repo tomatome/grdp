@@ -2,7 +2,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
 	"image"
 	"image/color"
@@ -16,6 +15,7 @@ import (
 	"github.com/google/gxui"
 	"github.com/google/gxui/samples/flags"
 	"github.com/google/gxui/themes/light"
+	"github.com/tomatome/grdp/core"
 	"github.com/tomatome/grdp/glog"
 )
 
@@ -157,37 +157,46 @@ func update() {
 	}()
 }
 
+func ToRGBA(pixel int, i int, data []byte) (r, g, b, a uint8) {
+	a = 255
+	switch pixel {
+	case 1:
+	case 2:
+		rgb565 := core.Uint16BE(data[i], data[i+1])
+		r, g, b = core.RGB565ToRGB(rgb565)
+	case 3:
+	case 4:
+		fallthrough
+	default:
+		r, g, b = data[i+2], data[i+1], data[i]
+	}
+
+	return
+}
+
 func paint_bitmap(bs []Bitmap) {
-	for _, b := range bs {
-		m := image.NewRGBA(image.Rect(0, 0, b.Width, b.Height))
-		i := 0
-		if b.BitsPerPixel == 2 {
-			for y := 0; y < b.Height; y++ {
-				for x := 0; x < b.Width; x++ {
-					b1 := make([]byte, 2)
-					b1[0] = b.Data[i+1]
-					b1[1] = b.Data[i]
-					colour := binary.BigEndian.Uint16(b1)
+	var (
+		pixel      int
+		i          int
+		r, g, b, a uint8
+	)
 
-					c := color.RGBA64{colour, colour, colour, 0xffff}
-					//c := color.RGBA{b.Data[i+1], b.Data[i+1], b.Data[i+1], 255}
-					i += 2
-					m.Set(x, y, c)
-				}
-			}
-
-		} else {
-			for y := 0; y < b.Height; y++ {
-				for x := 0; x < b.Width; x++ {
-					c := color.RGBA{b.Data[i+2], b.Data[i+1], b.Data[i], 255}
-					i += 4
-					m.Set(x, y, c)
-				}
+	for _, bm := range bs {
+		i = 0
+		pixel = bm.BitsPerPixel
+		m := image.NewRGBA(image.Rect(0, 0, bm.Width, bm.Height))
+		for y := 0; y < bm.Height; y++ {
+			for x := 0; x < bm.Width; x++ {
+				r, g, b, a = ToRGBA(pixel, i, bm.Data)
+				c := color.RGBA{r, g, b, a}
+				i += pixel
+				m.Set(x, y, c)
 			}
 		}
 
-		draw.Draw(ScreenImage, ScreenImage.Bounds().Add(image.Pt(b.DestLeft, b.DestTop)), m, m.Bounds().Min, draw.Src)
+		draw.Draw(ScreenImage, ScreenImage.Bounds().Add(image.Pt(bm.DestLeft, bm.DestTop)), m, m.Bounds().Min, draw.Src)
 	}
+
 	driverc.Call(func() {
 		texture := driverc.CreateTexture(ScreenImage, 1)
 		img.SetTexture(texture)

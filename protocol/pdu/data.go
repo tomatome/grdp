@@ -335,6 +335,7 @@ func readDataPDU(r io.Reader) (*DataPDU, error) {
 		return nil, err
 	}
 	var d DataPDUData
+	glog.Infof("header=%02x", header.PDUType2)
 	switch header.PDUType2 {
 	case PDUTYPE2_SYNCHRONIZE:
 		d = &SynchronizeDataPDU{}

@@ -48,6 +48,10 @@ func (g *RdpClient) SetRequestedProtocol(p uint32) {
 	g.x224.SetRequestedProtocol(p)
 }
 
+func BitmapDecompress(bitmap *pdu.BitmapData) []byte {
+	return core.Decompress(bitmap.BitmapDataStream, int(bitmap.Width), int(bitmap.Height), Bpp(bitmap.BitsPerPixel))
+}
+
 func uiRdp(info *Info) (error, *RdpClient) {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -77,7 +81,7 @@ func uiRdp(info *Info) (error, *RdpClient) {
 			data := v.BitmapDataStream
 			//glog.Info("data:", data)
 			if IsCompress {
-				data = decompress(&v)
+				data = BitmapDecompress(&v)
 				IsCompress = false
 			}
 
@@ -119,7 +123,7 @@ func (g *RdpClient) Login() error {
 	g.pdu.SetFastPathSender(g.tpkt)
 
 	//g.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
-	//g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
+	g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
 
 	err = g.x224.Connect()
 	if err != nil {

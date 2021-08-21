@@ -1,11 +1,8 @@
-package main
+package core
 
 import (
-	"encoding/binary"
 	"fmt"
 	"unsafe"
-
-	"github.com/tomatome/grdp/protocol/pdu"
 )
 
 func CVAL(p *[]uint8) int {
@@ -211,14 +208,8 @@ func REPEAT(f func(), count, x *int, width int) {
 // 	return true;
 // }
 
-func UInt16BE(data uint16) (uint8, uint8) {
-	b := make([]byte, 2)
-	binary.BigEndian.PutUint16(b, data)
-	return uint8(b[1]), uint8(b[0])
-}
-
 // /* 2 byte bitmap decompress */
-func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size int) bool {
+func decompress2(output *[]uint8, width, height int, input []uint8, size int) bool {
 	var (
 		prevline, line                   int
 		opcode, count, offset, code      int
@@ -229,26 +220,16 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 		colour1, colour2                 uint16
 		mix                              uint16 = 0xffff
 		fom_mask                         uint8
-		input                            = &input1
 	)
 
-	out1 := make([]uint16, width*height)
-	out := &out1
-	k := 0
-	for len(*input) != 0 {
-		k++
+	out := make([]uint16, width*height)
+	for len(input) != 0 {
 		fom_mask = 0
-		//fmt.Printf("input=%v\n", *input)
-		code = CVAL(input)
+		code = CVAL(&input)
 		opcode = code >> 4
-		//fmt.Printf("k=%d,opcode=%d\n", k, opcode)
 		/* Handle different opcode forms */
 		switch opcode {
-		case 0xc:
-			fallthrough
-		case 0xd:
-			fallthrough
-		case 0xe:
+		case 0xc, 0xd, 0xe:
 			opcode -= 6
 			count = code & 0xf
 			offset = 16
@@ -256,8 +237,8 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 		case 0xf:
 			opcode = code & 0xf
 			if opcode < 9 {
-				count = CVAL(input)
-				count |= CVAL(input) << 8
+				count = CVAL(&input)
+				count |= CVAL(&input) << 8
 			} else {
 				count = 1
 				if opcode < 0xb {
@@ -273,22 +254,20 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 			break
 		}
 
-		//fmt.Println("offset:", offset, "count:", count)
 		/* Handle strange cases for counts */
 		if offset != 0 {
 			isfillormix = ((opcode == 2) || (opcode == 7))
 			if count == 0 {
 				if isfillormix {
-					count = CVAL(input) + 1
+					count = CVAL(&input) + 1
 				} else {
-					count = CVAL(input) + offset
+					count = CVAL(&input) + offset
 				}
 			} else if isfillormix {
 				count <<= 3
 			}
 		}
 		/* Read preliminary data */
-		//fmt.Println("opcode1:", opcode, "input:", (*input)[0])
 		switch opcode {
 		case 0: /* Fill */
 			if (lastopcode == opcode) && !((x == width) && (prevline == 0)) {
@@ -296,16 +275,16 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 			}
 			break
 		case 8: /* Bicolour */
-			CVAL2(input, &colour1)
-			CVAL2(input, &colour2)
+			CVAL2(&input, &colour1)
+			CVAL2(&input, &colour2)
 			break
 		case 3: /* Colour */
-			CVAL2(input, &colour2)
+			CVAL2(&input, &colour2)
 			break
 		case 6: /* SetMix/Mix */
 			fallthrough
 		case 7: /* SetMix/FillOrMix */
-			CVAL2(input, &mix)
+			CVAL2(&input, &mix)
 			opcode -= 5
 			break
 		case 9: /* FillOrMix_1 */
@@ -322,7 +301,6 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 		lastopcode = opcode
 		mixmask = 0
 		/* Output body */
-		//fmt.Println("count:", count, "opcode:", opcode)
 		for count > 0 {
 			if x >= width {
 				if height <= 0 {
@@ -334,15 +312,13 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 				prevline = line
 				line = height * width
 			}
-			//fmt.Println("prevline:", prevline, "x:", x, "line:", line)
-			//fmt.Printf("e1input=%v\n", *input)
 			switch opcode {
 			case 0: /* Fill */
 				if insertmix {
 					if prevline == 0 {
-						(*out)[x+line] = mix
+						out[x+line] = mix
 					} else {
-						(*out)[x+line] = (*out)[prevline+x] ^ mix
+						out[x+line] = out[prevline+x] ^ mix
 					}
 					insertmix = false
 					count--
@@ -350,23 +326,22 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 				}
 				if prevline == 0 {
 					REPEAT(func() {
-						(*out)[x+line] = 0
+						out[x+line] = 0
 					}, &count, &x, width)
 				} else {
-					//fmt.Printf("prevline[%d]=%d\n", prevline+x, (*out)[prevline+x])
 					REPEAT(func() {
-						(*out)[x+line] = (*out)[prevline+x]
+						out[x+line] = out[prevline+x]
 					}, &count, &x, width)
 				}
 				break
 			case 1: /* Mix */
 				if prevline == 0 {
 					REPEAT(func() {
-						(*out)[x+line] = mix
+						out[x+line] = mix
 					}, &count, &x, width)
 				} else {
 					REPEAT(func() {
-						(*out)[x+line] = (*out)[prevline+x] ^ mix
+						out[x+line] = out[prevline+x] ^ mix
 					}, &count, &x, width)
 				}
 				break
@@ -377,61 +352,54 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 						if mixmask == 0 {
 							mask = fom_mask
 							if fom_mask == 0 {
-								mask = uint8(CVAL(input))
+								mask = uint8(CVAL(&input))
 								mixmask = 1
 							}
 						}
 						if mask&mixmask != 0 {
-							(*out)[x+line] = mix
+							out[x+line] = mix
 						} else {
-							(*out)[x+line] = 0
+							out[x+line] = 0
 						}
-						//fmt.Printf("(*out)0[%d]: %d\n", x+line, (*out)[x+line])
 					}, &count, &x, width)
 				} else {
 					REPEAT(func() {
-						//fmt.Printf("mask1: %d\n", mixmask)
 						mixmask = mixmask << 1
-						//fmt.Printf("mask2: %d, fom_mask=%d\n", mixmask, fom_mask)
 						if mixmask == 0 {
 							mask = fom_mask
 							if fom_mask == 0 {
-								mask = uint8(CVAL(input))
+								mask = uint8(CVAL(&input))
 								mixmask = 1
 							}
 						}
-						//fmt.Printf("mask&mixmask: %d\n", mask&mixmask)
 						if mask&mixmask != 0 {
-							(*out)[x+line] = (*out)[prevline+x] ^ mix
+							out[x+line] = out[prevline+x] ^ mix
 						} else {
-							(*out)[x+line] = (*out)[prevline+x]
+							out[x+line] = out[prevline+x]
 						}
-						//fmt.Printf("(*out)1[%d]: %d\n", x+line, (*out)[x+line])
-						//fmt.Printf("einput=%v\n", *input)
 					}, &count, &x, width)
 				}
 				break
 			case 3: /* Colour */
 				REPEAT(func() {
-					(*out)[x+line] = colour2
+					out[x+line] = colour2
 				}, &count, &x, width)
 				break
 			case 4: /* Copy */
 				REPEAT(func() {
 					var a uint16
-					CVAL2(input, &a)
-					(*out)[x+line] = a
-					//fmt.Printf("(*out)[%d]: %d\n", x+line, (*out)[x+line])
+					CVAL2(&input, &a)
+					out[x+line] = a
 				}, &count, &x, width)
 
 				break
 			case 8: /* Bicolour */
 				REPEAT(func() {
 					if bicolour {
-						(*out)[x+line] = colour2
+						out[x+line] = colour2
 						bicolour = false
 					} else {
-						(*out)[x+line] = colour1
+						out[x+line] = colour1
 						bicolour = true
 						count++
 					}
@@ -440,12 +408,12 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 				break
 			case 0xd: /* White */
 				REPEAT(func() {
-					(*out)[x+line] = 0xffff
+					out[x+line] = 0xffff
 				}, &count, &x, width)
 				break
 			case 0xe: /* Black */
 				REPEAT(func() {
-					(*out)[x+line] = 0
+					out[x+line] = 0
 				}, &count, &x, width)
 				break
 			default:
@@ -455,8 +423,8 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 		}
 	}
 	j := 0
-	for _, v := range *out {
-		(*output)[j], (*output)[j+1] = UInt16BE(v)
+	for _, v := range out {
+		(*output)[j], (*output)[j+1] = PutUint16BE(v)
 		j += 2
 	}
 	return true
@@ -747,37 +715,33 @@ func bitmap_decompress2(output *[]uint8, width, height int, input1 []uint8, size
 // }
 
 /* decompress a colour plane */
-func process_plane(in *[]uint8, width, height int, out *[]uint8, j int) int {
+func processPlane(in *[]uint8, width, height int, output *[]uint8, j int) int {
 	var (
-		indexw    int
-		indexh    int
-		code      int
-		collen    int
-		replen    int
-		color     int
-		x         int
-		revcode   int
-		last_line int
-		this_line int
+		indexw   int
+		indexh   int
+		code     int
+		collen   int
+		replen   int
+		color    int
+		x        int
+		revcode  int
+		lastline int
+		thisline int
 	)
 	ln := len(*in)
 
-	last_line = 0
+	lastline = 0
 	indexh = 0
 	i := 0
-	k := 0
 	for indexh < height {
-		k++
-		this_line = j + (width * height * 4) - ((indexh + 1) * width * 4)
-		//fmt.Println("code:", k)
+		thisline = j + (width * height * 4) - ((indexh + 1) * width * 4)
 		color = 0
 		indexw = 0
-		i = this_line
+		i = thisline
 
-		if last_line == 0 {
+		if lastline == 0 {
 			for indexw < width {
 				code = CVAL(in)
-				//fmt.Println("last_line:", code)
 				replen = code & 0xf
 				collen = (code >> 4) & 0xf
 				revcode = (replen << 4) | collen
@@ -787,16 +751,14 @@ func process_plane(in *[]uint8, width, height int, out *[]uint8, j int) int {
 				}
 				for collen > 0 {
 					color = CVAL(in)
-					(*out)[i] = uint8(color)
-					//fmt.Println("collen out[i]:", (*out)[i], i)
+					(*output)[i] = uint8(color)
 					i += 4
 
 					indexw++
 					collen--
 				}
 				for replen > 0 {
-					(*out)[i] = uint8(color)
-					//fmt.Println("replen out[i]:", (*out)[i], i)
+					(*output)[i] = uint8(color)
 					i += 4
 					indexw++
 					replen--
@@ -822,17 +784,15 @@ func process_plane(in *[]uint8, width, height int, out *[]uint8, j int) int {
 						x = x >> 1
 						color = x
 					}
-					x = int((*out)[indexw*4+last_line]) + color
-					(*out)[i] = uint8(x)
-					//fmt.Println("collen2 out[i]:", (*out)[i], i)
+					x = int((*output)[indexw*4+lastline]) + color
+					(*output)[i] = uint8(x)
 					i += 4
 					indexw++
 					collen--
 				}
 				for replen > 0 {
-					x = int((*out)[indexw*4+last_line]) + color
-					(*out)[i] = uint8(x)
-					//fmt.Println("replen2 out[i]:", (*out)[i], i)
+					x = int((*output)[indexw*4+lastline]) + color
+					(*output)[i] = uint8(x)
 					i += 4
 					indexw++
 					replen--
@@ -840,64 +800,55 @@ func process_plane(in *[]uint8, width, height int, out *[]uint8, j int) int {
 			}
 		}
 		indexh++
-		last_line = this_line
+		lastline = thisline
 	}
 	return ln - len(*in)
 }
 
 /* 4 byte bitmap decompress */
-func bitmap_decompress4(output *[]uint8, width, height int, input []uint8, size int) bool {
+func decompress4(output *[]uint8, width, height int, input []uint8, size int) bool {
 	var (
-		code      int
-		bytes_pro int
-		total_pro int
+		code             int
+		onceBytes, total int
 	)
 
 	code = CVAL(&input)
 	if code != 0x10 {
 		return false
 	}
-	total_pro = 1
-	bytes_pro = process_plane(&input, width, height, output, 3)
-	total_pro += bytes_pro
-	//input = input[bytes_pro:]
-	bytes_pro = process_plane(&input, width, height, output, 2)
-	total_pro += bytes_pro
-	//input = input[bytes_pro:]
-	bytes_pro = process_plane(&input, width, height, output, 1)
-	total_pro += bytes_pro
-	//input = input[bytes_pro:]
-	bytes_pro = process_plane(&input, width, height, output, 0)
-	total_pro += bytes_pro
-	return size == total_pro
+
+	total = 1
+	onceBytes = processPlane(&input, width, height, output, 3)
+	total += onceBytes
+
+	onceBytes = processPlane(&input, width, height, output, 2)
+	total += onceBytes
+
+	onceBytes = processPlane(&input, width, height, output, 1)
+	total += onceBytes
+
+	onceBytes = processPlane(&input, width, height, output, 0)
+	total += onceBytes
+
+	return size == total
 }
 
 /* main decompress function */
-func bitmap_decompress(input []uint8, width, height int, Bpp int) []uint8 {
-	//rv := false
+func Decompress(input []uint8, width, height int, Bpp int) []uint8 {
 	size := width * height * Bpp
 	output := make([]uint8, size)
 	switch Bpp {
 	case 1:
-		//rv = bitmap_decompress1(output, width, height, input, size)
-		break
+		//decompress1(output, width, height, input, size)
 	case 2:
-		bitmap_decompress2(&output, width, height, input, size)
-		break
+		decompress2(&output, width, height, input, size)
 	case 3:
-		//rv = bitmap_decompress3(output, width, height, input, size)
-		break
+		//decompress3(output, width, height, input, size)
 	case 4:
-		bitmap_decompress4(&output, width, height, input, size)
-		break
+		decompress4(&output, width, height, input, size)
 	default:
 		fmt.Printf("Bpp %d\n", Bpp)
-		break
 	}
-	//fmt.Printf("output:%v\n", output)
+
 	return output
-}
-func decompress(bitmap *pdu.BitmapData) []byte {
-	pixel := Bpp(bitmap.BitsPerPixel)
-	return bitmap_decompress(bitmap.BitmapDataStream, int(bitmap.Width), int(bitmap.Height), pixel)
 }
