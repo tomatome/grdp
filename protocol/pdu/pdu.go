@@ -314,7 +314,7 @@ func (c *Client) RecvFastPath(secFlag byte, s []byte) {
 	for r.Len() > 0 {
 		p, err := readFastPathUpdatePDU(r)
 		if err != nil {
-			glog.Debugf("readFastPathUpdatePDU:", err)
+			glog.Debug("readFastPathUpdatePDU:", err)
 			//continue
 			return
 		}
