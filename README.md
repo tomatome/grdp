@@ -10,7 +10,7 @@ Forked from icodeface/grdp
 
 * [x] Standard RDP Authentication
 * [x] SSL Authentication
-* [x] NLA Authentication
+* [x] NTLMv2 Authentication
 * [ ] Client UI(ugly)
 * [ ] VNC client(unfinished)
 
