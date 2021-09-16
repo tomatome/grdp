@@ -1,6 +1,12 @@
 package core
 
 import (
+	"crypto/rsa"
+	"math/big"
+
+	"github.com/huin/asn1ber"
+
+	//"crypto/tls"
 	"errors"
 	"net"
 
@@ -55,10 +61,15 @@ func (s *SocketLayer) StartTLS() error {
 	return s.tlsConn.Handshake()
 }
 
+type PublicKey struct {
+	N *big.Int `asn1:"explicit,tag:0"` // modulus
+	E int      `asn1:"explicit,tag:1"` // public exponent
+}
+
 func (s *SocketLayer) TlsPubKey() ([]byte, error) {
 	if s.tlsConn == nil {
 		return nil, errors.New("TLS conn does not exist")
 	}
-
-	return s.tlsConn.ConnectionState().PeerCertificates[0].RawSubjectPublicKeyInfo, nil
+	pub := s.tlsConn.ConnectionState().PeerCertificates[0].PublicKey.(*rsa.PublicKey)
+	return asn1ber.Marshal(*pub)
 }

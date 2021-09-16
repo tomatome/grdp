@@ -117,6 +117,7 @@ func (g *RdpClient) Login() error {
 	g.sec.SetUser(user)
 	g.sec.SetPwd(pwd)
 	g.sec.SetDomain(domain)
+	//g.sec.SetClientAutoReconnect(3, core.Random(16))
 
 	g.tpkt.SetFastPathListener(g.sec)
 	g.sec.SetFastPathListener(g.pdu)
@@ -208,7 +209,7 @@ func (g *RdpClient) MouseDown(button int, x, y int) {
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_MOUSE, []pdu.InputEventsInterface{p})
 }
 func (g *RdpClient) Close() {
-	if g.tpkt != nil {
+	if g != nil && g.tpkt != nil {
 		g.tpkt.Close()
 	}
 }

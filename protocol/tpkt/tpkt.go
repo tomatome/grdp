@@ -70,7 +70,7 @@ func (t *TPKT) StartNLA() error {
 	if err != nil {
 		return fmt.Errorf("read %s", err)
 	} else {
-		glog.Info("Read success")
+		glog.Debug("StartNLA Read success")
 	}
 	return t.recvChallenge(resp[:n])
 }
@@ -82,30 +82,28 @@ func (t *TPKT) recvChallenge(data []byte) error {
 		glog.Info("DecodeDERTRequest", err)
 		return err
 	}
-	glog.Infof("tsreq:%+v", tsreq)
+	glog.Debugf("tsreq:%+v", tsreq)
 	// get pubkey
-	pubkey, _ := t.Conn.TlsPubKey()
-	fmt.Printf("pubkey=%+v\n", pubkey)
+	pubkey, err := t.Conn.TlsPubKey()
+	glog.Debugf("pubkey=%+v", pubkey)
+
 	authMsg, ntlmSec := t.ntlm.GetAuthenticateMessage(tsreq.NegoTokens[0].Data)
 	t.ntlmSec = ntlmSec
-	encryptPubkey := ntlmSec.GssEncrypt(pubkey)
-	fmt.Printf("authMsg=%+v\n", authMsg)
-	fmt.Printf("encryptPubkey=%+v\n", encryptPubkey)
-	req := nla.EncodeDERTRequest([]nla.Message{authMsg}, nil, encryptPubkey)
 
+	encryptPubkey := ntlmSec.GssEncrypt(pubkey)
+	req := nla.EncodeDERTRequest([]nla.Message{authMsg}, nil, encryptPubkey)
 	_, err = t.Conn.Write(req)
 	if err != nil {
 		glog.Info("send AuthenticateMessage", err)
 		return err
 	}
-	fmt.Println("wait Read")
 	resp := make([]byte, 1024)
 	n, err := t.Conn.Read(resp)
 	if err != nil {
 		glog.Error("Read:", err)
 		return fmt.Errorf("read %s", err)
 	} else {
-		glog.Info("Read success")
+		glog.Debug("recvChallenge Read success")
 	}
 	return t.recvPubKeyInc(resp[:n])
 }
@@ -117,13 +115,13 @@ func (t *TPKT) recvPubKeyInc(data []byte) error {
 		glog.Info("DecodeDERTRequest", err)
 		return err
 	}
-
-	pubkey := t.ntlmSec.GssDecrypt([]byte(tsreq.PubKeyAuth))
-	glog.Info(pubkey)
+	glog.Debug("PubKeyAuth:", tsreq.PubKeyAuth)
+	//ignore
+	//pubkey := t.ntlmSec.GssDecrypt([]byte(tsreq.PubKeyAuth))
 	domain, username, password := t.ntlm.GetEncodedCredentials()
 	credentials := nla.EncodeDERTCredentials(domain, username, password)
 	authInfo := t.ntlmSec.GssEncrypt(credentials)
-	req := nla.EncodeDERTRequest([]nla.Message{}, authInfo, nil)
+	req := nla.EncodeDERTRequest(nil, authInfo, nil)
 	_, err = t.Conn.Write(req)
 	if err != nil {
 		glog.Info("send AuthenticateMessage", err)

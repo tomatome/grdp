@@ -13,20 +13,20 @@ type NegoToken struct {
 type TSRequest struct {
 	Version    int         `asn1:"explicit,tag:0"`
 	NegoTokens []NegoToken `asn1:"optional,explicit,tag:1"`
-	AuthInfo   string      `asn1:"optional,explicit,tag:2"`
-	PubKeyAuth string      `asn1:"optional,explicit,tag:3"`
+	AuthInfo   []byte      `asn1:"optional,explicit,tag:2"`
+	PubKeyAuth []byte      `asn1:"optional,explicit,tag:3"`
 	//ErrorCode  int         `asn1:"optional,explicit,tag:4"`
 }
 
 type TSCredentials struct {
 	CredType    int    `asn1:"explicit,tag:0"`
-	Credentials string `asn1:"explicit,tag:1"`
+	Credentials []byte `asn1:"explicit,tag:1"`
 }
 
 type TSPasswordCreds struct {
-	DomainName string `asn1:"explicit,tag:0"`
-	UserName   string `asn1:"explicit,tag:1"`
-	Password   string `asn1:"explicit,tag:2"`
+	DomainName []byte `asn1:"explicit,tag:0"`
+	UserName   []byte `asn1:"explicit,tag:1"`
+	Password   []byte `asn1:"explicit,tag:2"`
 }
 
 type TSCspDataDetail struct {
@@ -44,13 +44,13 @@ type TSSmartCardCreds struct {
 	DomainHint string            `asn1:"explicit,tag:3"`
 }
 
-type OpenSSLRSAPublicKey struct {
-}
-
 func EncodeDERTRequest(msgs []Message, authInfo []byte, pubKeyAuth []byte) []byte {
 	req := TSRequest{
-		Version:    2,
-		NegoTokens: make([]NegoToken, 0),
+		Version: 2,
+	}
+
+	if len(msgs) > 0 {
+		req.NegoTokens = make([]NegoToken, 0, len(msgs))
 	}
 
 	for _, msg := range msgs {
@@ -59,11 +59,11 @@ func EncodeDERTRequest(msgs []Message, authInfo []byte, pubKeyAuth []byte) []byt
 	}
 
 	if len(authInfo) > 0 {
-		// todo
+		req.AuthInfo = authInfo
 	}
 
 	if len(pubKeyAuth) > 0 {
-		// todo
+		req.PubKeyAuth = pubKeyAuth
 	}
 
 	result, err := asn1.Marshal(req)
@@ -78,18 +78,17 @@ func DecodeDERTRequest(s []byte) (*TSRequest, error) {
 	_, err := asn1.Unmarshal(s, treq)
 	return treq, err
 }
-func EncodeDERTCredentials(domain, username, password string) []byte {
+func EncodeDERTCredentials(domain, username, password []byte) []byte {
 	tpas := TSPasswordCreds{domain, username, password}
 	result, err := asn1.Marshal(tpas)
 	if err != nil {
 		glog.Error(err)
 	}
-	tcre := TSCredentials{1, string(result)}
+	tcre := TSCredentials{1, result}
 	result, err = asn1.Marshal(tcre)
 	if err != nil {
 		glog.Error(err)
 	}
-
 	return result
 }
 

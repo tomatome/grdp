@@ -166,7 +166,7 @@ func readDemandActivePDU(r io.Reader) (*DemandActivePDU, error) {
 	}
 	d.NumberCapabilities = uint16(len(d.CapabilitySets))
 	d.SessionId, err = core.ReadUInt32LE(r)
-	glog.Info("SessionId:", d.SessionId)
+	//glog.Info("SessionId:", d.SessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +335,7 @@ func readDataPDU(r io.Reader) (*DataPDU, error) {
 		return nil, err
 	}
 	var d DataPDUData
-	glog.Infof("header=%02x", header.PDUType2)
+	glog.Debugf("header=%02x", header.PDUType2)
 	switch header.PDUType2 {
 	case PDUTYPE2_SYNCHRONIZE:
 		d = &SynchronizeDataPDU{}
@@ -348,19 +348,24 @@ func readDataPDU(r io.Reader) (*DataPDU, error) {
 	case PDUTYPE2_FONTMAP:
 		d = &FontMapDataPDU{}
 	case PDUTYPE2_SAVE_SESSION_INFO:
-		d = &SaveSessionInfo{}
+		s := &SaveSessionInfo{}
+		s.Unpack(r)
+		d = s
 	default:
 		err = errors.New(fmt.Sprintf("Unknown data pdu type2 0x%02x", header.PDUType2))
 		glog.Error(err)
 		return nil, err
 	}
 
-	err = struc.Unpack(r, d)
-	if err != nil {
-		glog.Error("read data pdu error", err)
-		return nil, err
+	if header.PDUType2 != PDUTYPE2_SAVE_SESSION_INFO {
+		err = struc.Unpack(r, d)
+		if err != nil {
+			glog.Error("read data pdu error", err)
+			return nil, err
+		}
 	}
-	glog.Infof("%+v", d)
+
+	glog.Debugf("d=%+v", d)
 	p := &DataPDU{
 		Header: header,
 		Data:   d,
@@ -436,6 +441,10 @@ const (
 	INFOTYPE_LOGON_PLAINNOTIFY   = 0x00000002
 	INFOTYPE_LOGON_EXTENDED_INFO = 0x00000003
 )
+const (
+	LOGON_EX_AUTORECONNECTCOOKIE = 0x00000001
+	LOGON_EX_LOGONERRORS         = 0x00000002
+)
 
 type LogonFields struct {
 	CbFileData uint32   `struc:"little"`
@@ -445,11 +454,47 @@ type LogonFields struct {
 	random     [16]byte //16 `struc:"little"`
 }
 type SaveSessionInfo struct {
-	InfoType      uint32      `struc:"little"`
-	Length        uint16      `struc:"little"`
-	FieldsPresent uint32      `struc:"little"`
-	Logon         LogonFields `struc:"little"`
-	Pad           [570]byte   `struc:"little"`
+	InfoType      uint32
+	Length        uint16
+	FieldsPresent uint32
+	LogonId       uint32
+	Random        []byte
+	//Pad   [570]byte
+}
+
+func (s *SaveSessionInfo) Unpack(r io.Reader) (err error) {
+	s.InfoType, err = core.ReadUInt32LE(r)
+	if err == nil && s.InfoType == INFOTYPE_LOGON_EXTENDED_INFO {
+		s.Length, err = core.ReadUint16LE(r)
+		s.FieldsPresent, err = core.ReadUInt32LE(r)
+		glog.Info("FieldsPresent:", s.FieldsPresent)
+		if s.FieldsPresent&LOGON_EX_AUTORECONNECTCOOKIE != 0 {
+			core.ReadUInt32LE(r)
+			b, _ := core.ReadUInt32LE(r)
+			if b != 28 {
+				return errors.New(fmt.Sprintf("invalid length in Auto-Reconnect packet"))
+			}
+			b, _ = core.ReadUInt32LE(r)
+			if b != 1 {
+				return errors.New(fmt.Sprintf("unsupported version of Auto-Reconnect packet"))
+			}
+			b, _ = core.ReadUInt32LE(r)
+			glog.Info("Session:", b)
+			s.LogonId = b
+			s.Random, _ = core.ReadBytes(16, r)
+			glog.Info("Random:", s.Random)
+		} else {
+			core.ReadUInt32LE(r)
+			b, _ := core.ReadUInt32LE(r)
+			glog.Info("ErrorNotificationType :", b)
+			b, _ = core.ReadUInt32LE(r)
+			glog.Info("Session:", b)
+			s.LogonId = b
+		}
+		core.ReadBytes(570, r)
+	}
+
+	return
 }
 
 func (*SaveSessionInfo) Type2() uint8 {
@@ -478,6 +523,7 @@ func (*PersistKeyPDU) Type2() uint8 {
 
 type UpdateData interface {
 	FastPathUpdateType() uint8
+	Unpack(io.Reader) error
 }
 
 type BitmapCompressedDataHeader struct {
@@ -501,18 +547,18 @@ type BitmapData struct {
 	BitmapDataStream []byte
 }
 
+func (b *BitmapData) IsCompress() bool {
+	return b.Flags&BITMAP_COMPRESSION != 0
+}
+
 type FastPathBitmapUpdateDataPDU struct {
 	Header           uint16 `struc:"little"`
 	NumberRectangles uint16 `struc:"little,sizeof=Rectangles"`
 	Rectangles       []BitmapData
 }
 
-func (b *BitmapData) IsCompress() bool {
-	return b.Flags&BITMAP_COMPRESSION != 0
-}
-func (f *FastPathBitmapUpdateDataPDU) Unpack(data []byte) error {
+func (f *FastPathBitmapUpdateDataPDU) Unpack(r io.Reader) error {
 	var err error
-	r := bytes.NewReader(data)
 	f.Header, err = core.ReadUint16LE(r)
 	f.NumberRectangles, err = core.ReadUint16LE(r)
 	f.Rectangles = make([]BitmapData, 0, f.NumberRectangles)
@@ -585,25 +631,21 @@ func readFastPathUpdatePDU(r io.Reader) (*FastPathUpdatePDU, error) {
 	var d UpdateData
 	switch f.UpdateHeader & 0xf {
 	case FASTPATH_UPDATETYPE_BITMAP:
-		fb := &FastPathBitmapUpdateDataPDU{}
-		err = fb.Unpack(dataBytes)
+		d = &FastPathBitmapUpdateDataPDU{}
+
+	default:
+		glog.Debugf("Unknown Fast Path PDU type 0x%x", f.UpdateHeader)
+		return f, errors.New(fmt.Sprintf("Unknown Fast Path PDU type 0x%x", f.UpdateHeader))
+		//d = nil
+	}
+	if d != nil {
+		err = d.Unpack(bytes.NewReader(dataBytes))
 		if err != nil {
 			glog.Error("Unpack:", err)
 			return nil, err
 		}
-		d = fb
-	default:
-		//glog.Errorf("Unknown Fast Path PDU type 0x%x", f.UpdateHeader)
-		return f, errors.New(fmt.Sprintf("Unknown Fast Path PDU type 0x%x", f.UpdateHeader))
-		//d = nil
 	}
-	//if d != nil {
-	//err = struc.Unpack(bytes.NewReader(dataBytes), d)
-	//if err != nil {
-	//glog.Error("Unpack:", err)
-	//return nil, err
-	//}
-	//}
+
 	f.Data = d
 	return f, nil
 }

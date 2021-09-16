@@ -5,9 +5,10 @@ import (
 	"crypto/md5"
 	"crypto/rc4"
 	"encoding/binary"
-	"golang.org/x/crypto/md4"
 	"strings"
 	"unicode/utf16"
+
+	"golang.org/x/crypto/md4"
 )
 
 func convertUTF16ToLittleEndianBytes(u []uint16) []byte {
@@ -21,6 +22,21 @@ func convertUTF16ToLittleEndianBytes(u []uint16) []byte {
 // s.encode('utf-16le')
 func UnicodeEncode(p string) []byte {
 	return convertUTF16ToLittleEndianBytes(utf16.Encode([]rune(p)))
+}
+
+func UnicodeDecode(p []byte) string {
+	b := make([]byte, 2)
+	n := make([]uint16, 0, len(p)/2)
+	for i, v := range p {
+		if i%2 == 0 {
+			b[0] = v
+		} else {
+			b[1] = v
+			a := binary.LittleEndian.Uint16(b)
+			n = append(n, a)
+		}
+	}
+	return string(utf16.Decode(n))
 }
 
 func MD4(data []byte) []byte {

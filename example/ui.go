@@ -35,6 +35,7 @@ func appMain(driver gxui.Driver) {
 	window.SetScale(flags.DefaultScaleFactor)
 
 	img = theme.CreateImage()
+
 	layoutImg := theme.CreateLinearLayout()
 	layoutImg.SetSizeMode(gxui.Fill)
 	layoutImg.SetHorizontalAlignment(gxui.AlignCenter)
@@ -84,11 +85,11 @@ func appMain(driver gxui.Driver) {
 	user.SetDesiredWidth(width / 4)
 	passwd.SetDesiredWidth(width / 4)
 	//ip.SetText("192.168.18.100:5902")
-	ip.SetText("192.168.18.107:3389")
-	//user.SetText("administrator")
-	user.SetText("wren")
-	//passwd.SetText("Jhadmin123")
-	passwd.SetText("wren")
+	ip.SetText("192.168.0.132:3389")
+	user.SetText("administrator")
+	//user.SetText("wren")
+	passwd.SetText("Jhadmin123")
+	//passwd.SetText("wren")
 
 	bok := theme.CreateButton()
 	bok.SetText("OK")
@@ -108,6 +109,7 @@ func appMain(driver gxui.Driver) {
 		glog.Info("ok:", gc)
 		layout.SetVisible(false)
 		layoutImg.SetVisible(true)
+		ip.GainedFocus()
 	})
 	bcancel := theme.CreateButton()
 	bcancel.SetText("Clear")
@@ -133,7 +135,10 @@ func appMain(driver gxui.Driver) {
 	window.AddChild(layout)
 	window.AddChild(layoutImg)
 	window.OnClose(func() {
-		gc.Close()
+		if gc != nil {
+			gc.Close()
+		}
+
 		driver.Terminate()
 	})
 	update()

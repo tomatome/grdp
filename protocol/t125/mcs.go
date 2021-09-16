@@ -327,9 +327,9 @@ func (c *MCSClient) recvConnectResponse(s []byte) {
 			return
 		}
 	}
-	glog.Infof("serverSecurityData: %+v", c.serverSecurityData)
-	glog.Infof("serverCoreData: %+v", c.serverCoreData)
-	glog.Infof("serverNetworkData: %+v", c.serverNetworkData)
+	glog.Debugf("serverSecurityData: %+v", c.serverSecurityData)
+	glog.Debugf("serverCoreData: %+v", c.serverCoreData)
+	glog.Debugf("serverNetworkData: %+v", c.serverNetworkData)
 	glog.Debug("mcs sendErectDomainRequest")
 	c.sendErectDomainRequest()
 

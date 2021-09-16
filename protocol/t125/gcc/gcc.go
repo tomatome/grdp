@@ -564,7 +564,7 @@ func ReadConferenceCreateResponse(data []byte) []interface{} {
 			}
 			ret = append(ret, d)
 		}
-		glog.Infof("d:%+v", d)
+		glog.Debugf("d:%+v", d)
 	}
 
 	return ret

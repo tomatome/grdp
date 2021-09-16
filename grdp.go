@@ -58,12 +58,13 @@ func (g *Client) Login(domain, user, pwd string) error {
 	g.sec.SetUser(user)
 	g.sec.SetPwd(pwd)
 	g.sec.SetDomain(domain)
+	//g.sec.SetClientAutoReconnect()
 
 	g.tpkt.SetFastPathListener(g.sec)
 	g.sec.SetFastPathListener(g.pdu)
 	g.pdu.SetFastPathSender(g.tpkt)
 
-	g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
+	//g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
 	//g.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
 
 	err = g.x224.Connect()
@@ -76,7 +77,7 @@ func (g *Client) Login(domain, user, pwd string) error {
 
 	g.pdu.On("error", func(e error) {
 		err = e
-		glog.Error(e)
+		glog.Error("error", e)
 		wg.Done()
 	}).On("close", func() {
 		err = errors.New("close")
@@ -133,8 +134,8 @@ func (g *Client) LoginVNC() error {
 }
 
 func main() {
-	g := NewClient("192.168.18.107:3389", glog.DEBUG)
-	err := g.Login("", "wren", "wren")
+	g := NewClient("192.168.18.107:3389", glog.INFO)
+	err := g.Login("WIN2012R2", "wren", "wren")
 	//g := NewClient("192.168.18.100:5902", glog.DEBUG)
 	//err := g.LoginVNC()
 	if err != nil {

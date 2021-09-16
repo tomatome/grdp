@@ -11,6 +11,8 @@ import (
 	"math/big"
 	"unicode/utf16"
 
+	"github.com/tomatome/grdp/protocol/nla"
+
 	"github.com/tomatome/grdp/core"
 	"github.com/tomatome/grdp/emission"
 	"github.com/tomatome/grdp/glog"
@@ -85,6 +87,24 @@ const (
 	FASTPATH_OUTPUT_ENCRYPTED       = 0x2
 )
 
+type ClientAutoReconnect struct {
+	CbAutoReconnectLen uint16
+	CbLen              uint32
+	Version            uint32
+	LogonId            uint32
+	SecVerifier        []byte
+}
+
+func NewClientAutoReconnect(id uint32, random []byte) *ClientAutoReconnect {
+	return &ClientAutoReconnect{
+		CbAutoReconnectLen: 28,
+		CbLen:              28,
+		Version:            1,
+		LogonId:            id,
+		SecVerifier:        nla.HMAC_MD5(random, random),
+	}
+}
+
 type RDPExtendedInfo struct {
 	ClientAddressFamily uint16 `struc:"little"`
 	CbClientAddress     uint16 `struc:"little,sizeof=ClientAddress"`
@@ -94,15 +114,17 @@ type RDPExtendedInfo struct {
 	ClientTimeZone      []byte `struc:"[172]byte"`
 	ClientSessionId     uint32 `struc:"litttle"`
 	PerformanceFlags    uint32 `struc:"little"`
+	AutoReconnect       *ClientAutoReconnect
 }
 
-func NewExtendedInfo() *RDPExtendedInfo {
+func NewExtendedInfo(auto *ClientAutoReconnect) *RDPExtendedInfo {
 	return &RDPExtendedInfo{
 		ClientAddressFamily: AF_INET,
 		ClientAddress:       []byte{0, 0},
 		ClientDir:           []byte{0, 0},
 		ClientTimeZone:      make([]byte, 172),
 		ClientSessionId:     0,
+		AutoReconnect:       auto,
 	}
 }
 
@@ -116,6 +138,14 @@ func (o *RDPExtendedInfo) Serialize() []byte {
 	core.WriteBytes(o.ClientTimeZone, buff)
 	core.WriteUInt32LE(o.ClientSessionId, buff)
 	core.WriteUInt32LE(o.PerformanceFlags, buff)
+
+	if o.AutoReconnect != nil {
+		core.WriteUInt16LE(o.AutoReconnect.CbAutoReconnectLen, buff)
+		core.WriteUInt32LE(o.AutoReconnect.CbLen, buff)
+		core.WriteUInt32LE(o.AutoReconnect.Version, buff)
+		core.WriteUInt32LE(o.AutoReconnect.LogonId, buff)
+		core.WriteBytes(o.AutoReconnect.SecVerifier, buff)
+	}
 
 	return buff.Bytes()
 }
@@ -145,9 +175,13 @@ func NewRDPInfo() *RDPInfo {
 		Password:       []byte{0, 0},
 		AlternateShell: []byte{0, 0},
 		WorkingDir:     []byte{0, 0},
-		ExtendedInfo:   NewExtendedInfo(),
+		ExtendedInfo:   NewExtendedInfo(nil),
 	}
 	return info
+}
+
+func (o *RDPInfo) SetClientAutoReconnect(auto *ClientAutoReconnect) {
+	o.ExtendedInfo.AutoReconnect = auto
 }
 
 func (o *RDPInfo) Serialize(hasExtended bool) []byte {
@@ -374,6 +408,11 @@ func NewClient(t core.Transport) *Client {
 	}
 	t.On("connect", c.connect)
 	return c
+}
+
+func (c *Client) SetClientAutoReconnect(id uint32, random []byte) {
+	auto := NewClientAutoReconnect(id, random)
+	c.info.SetClientAutoReconnect(auto)
 }
 
 func (c *Client) SetUser(user string) {

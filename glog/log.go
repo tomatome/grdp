@@ -50,7 +50,15 @@ func Debug(v ...interface{}) {
 		logger.Output(2, fmt.Sprintln(v...))
 	}
 }
-
+func Debugf(f string, v ...interface{}) {
+	checkLogger()
+	if level <= DEBUG {
+		mu.Lock()
+		defer mu.Unlock()
+		logger.SetPrefix("[DEBUG]")
+		logger.Output(2, fmt.Sprintln(fmt.Sprintf(f, v...)))
+	}
+}
 func Info(v ...interface{}) {
 	checkLogger()
 	if level <= INFO {
