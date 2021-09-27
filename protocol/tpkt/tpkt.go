@@ -52,7 +52,6 @@ func (t *TPKT) StartTLS() error {
 }
 
 func (t *TPKT) StartNLA() error {
-	glog.Info("StartNLA")
 	err := t.StartTLS()
 	if err != nil {
 		glog.Info("start tls failed", err)

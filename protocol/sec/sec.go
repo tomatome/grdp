@@ -199,7 +199,6 @@ func (o *RDPInfo) Serialize(hasExtended bool) []byte {
 	core.WriteBytes(o.AlternateShell, buff)
 	core.WriteBytes(o.WorkingDir, buff)
 	if hasExtended {
-		//struc.Pack(buff, o.ExtendedInfo)
 		core.WriteBytes(o.ExtendedInfo.Serialize(), buff)
 	}
 	return buff.Bytes()
@@ -269,16 +268,7 @@ func NewSEC(t core.Transport) *SEC {
 	return sec
 }
 
-func (s *SEC) Read(b []byte) (n int, err error) {
-	//r := bytes.NewReader(b)
-	//securityFlag, _ := core.ReadUint16LE(r)
-	//core.ReadUint16LE(r) //securityFlagHi
-
-	data := b
-	//if securityFlag&ENCRYPT != 0 {
-	//s1, _ := core.ReadBytes(r.Len(), r)
-	//data = s.readEncryptedPayload(s1, s.enableSecureCheckSum)
-	//}
+func (s *SEC) Read(data []byte) (n int, err error) {
 	return s.transport.Read(data)
 }
 
@@ -394,7 +384,6 @@ type Client struct {
 	*SEC
 	userId    uint16
 	channelId uint16
-
 	//initialise decrypt and encrypt keys
 	initialDecrytKey  []byte
 	initialEncryptKey []byte
@@ -413,6 +402,15 @@ func NewClient(t core.Transport) *Client {
 func (c *Client) SetClientAutoReconnect(id uint32, random []byte) {
 	auto := NewClientAutoReconnect(id, random)
 	c.info.SetClientAutoReconnect(auto)
+}
+
+func (c *Client) SetAlternateShell(shell string) {
+	buff := &bytes.Buffer{}
+	for _, ch := range utf16.Encode([]rune(shell)) {
+		core.WriteUInt16LE(ch, buff)
+	}
+	core.WriteUInt16LE(0, buff)
+	c.info.AlternateShell = buff.Bytes()
 }
 
 func (c *Client) SetUser(user string) {
@@ -451,6 +449,7 @@ func (c *Client) connect(clientData []interface{}, serverData []interface{}, use
 	c.serverData = serverData
 	c.userId = userId
 	for _, channel := range channels {
+		glog.Debug("channel:", channel.Name, channel.ID)
 		if channel.Name == "global" {
 			c.channelId = channel.ID
 			break

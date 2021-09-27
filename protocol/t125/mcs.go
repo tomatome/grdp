@@ -415,6 +415,7 @@ func (c *MCSClient) connectChannels() {
 	glog.Debug("sendChannelJoinRequest:", c.channels[c.channelsConnected].Name)
 	c.sendChannelJoinRequest(c.channels[c.channelsConnected].ID)
 	c.channelsConnected += 1
+
 	c.transport.Once("data", c.recvChannelJoinConfirm)
 }
 
@@ -450,7 +451,6 @@ func (c *MCSClient) recvData(s []byte) {
 	userId += MCS_USERCHANNEL_BASE
 
 	channelId, _ := per.ReadInteger16(r)
-
 	per.ReadEnumerates(r)
 	size, _ := per.ReadLength(r)
 
@@ -506,25 +506,29 @@ func (c *MCSClient) recvChannelJoinConfirm(s []byte) {
 		return
 	}
 
-	//if confirm == 0 {
-	//for i := 0; i < int(c.serverNetworkData.ChannelCount); i++ {
-	//if channelId == c.serverNetworkData.ChannelIdArray[i] {
-	//c.channels[channelId] = c.[i][1]
-	//}
-	//}
-	//}
+	/*if confirm == 0 {
+		for i := 0; i < int(c.serverNetworkData.ChannelCount); i++ {
+			if channelId == c.serverNetworkData.ChannelIdArray[i] {
+				c.channels[channelId] = c.serverNetworkData.ChannelIdArray[i][1]
+			}
+		}
+	}*/
 
 	c.connectChannels()
 }
 
-func (c *MCSClient) Write(data []byte) (n int, err error) {
+func (c *MCSClient) SendToChannel(data []byte, channelId uint16) (n int, err error) {
 	buff := &bytes.Buffer{}
 	writeMCSPDUHeader(c.sendOpCode, 0, buff)
 	per.WriteInteger16(c.userId-MCS_USERCHANNEL_BASE, buff)
-	per.WriteInteger16(c.channels[0].ID, buff)
+	per.WriteInteger16(channelId, buff)
 	core.WriteUInt8(0x70, buff)
 	per.WriteLength(len(data), buff)
 	core.WriteBytes(data, buff)
 	glog.Debug("MCSClient write", hex.EncodeToString(buff.Bytes()))
 	return c.transport.Write(buff.Bytes())
+}
+
+func (c *MCSClient) Write(data []byte) (n int, err error) {
+	return c.SendToChannel(data, c.channels[0].ID)
 }

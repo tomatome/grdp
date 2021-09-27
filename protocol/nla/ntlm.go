@@ -410,7 +410,7 @@ func (n *NTLMv2) GetAuthenticateMessage(s []byte) (*AuthenticateMessage, *NTLMv2
 	if challengeMsg.NegotiateFlags&NTLMSSP_NEGOTIATE_UNICODE != 0 {
 		n.enableUnicode = true
 	}
-	glog.Infof("User: %s, passwd:%s", n.user, n.password)
+	glog.Infof("user: %s, passwd:%s", n.user, n.password)
 	domain, user, _ := n.GetEncodedCredentials()
 
 	n.authenticateMessage = NewAuthenticateMessage(challengeMsg.NegotiateFlags,
@@ -456,7 +456,7 @@ func (n *NTLMv2) GetAuthenticateMessage(s []byte) (*AuthenticateMessage, *NTLMv2
 
 func (n *NTLMv2) GetEncodedCredentials() ([]byte, []byte, []byte) {
 	if n.enableUnicode {
-		return UnicodeEncode(n.domain), UnicodeEncode(n.user), UnicodeEncode(n.password)
+		return core.UnicodeEncode(n.domain), core.UnicodeEncode(n.user), core.UnicodeEncode(n.password)
 	}
 	return []byte(n.domain), []byte(n.user), []byte(n.password)
 }

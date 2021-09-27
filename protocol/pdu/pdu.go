@@ -79,6 +79,16 @@ func NewPDULayer(t core.Transport) *PDULayer {
 			CAPSTYPE_VIRTUALCHANNEL:        &VirtualChannelCapability{},
 			CAPSTYPE_SOUND:                 &SoundCapability{},
 			CAPSETTYPE_MULTIFRAGMENTUPDATE: &MultiFragmentUpdate{},
+			CAPSTYPE_RAIL: &RemoteProgramsCapability{
+				RailSupportLevel: RAIL_LEVEL_SUPPORTED |
+					RAIL_LEVEL_SHELL_INTEGRATION_SUPPORTED |
+					RAIL_LEVEL_LANGUAGE_IME_SYNC_SUPPORTED |
+					RAIL_LEVEL_SERVER_TO_CLIENT_IME_SYNC_SUPPORTED |
+					RAIL_LEVEL_HIDE_MINIMIZED_APPS_SUPPORTED |
+					RAIL_LEVEL_WINDOW_CLOAKING_SUPPORTED |
+					RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED |
+					RAIL_LEVEL_DOCKED_LANGBAR_SUPPORTED,
+			},
 		},
 	}
 
@@ -107,6 +117,8 @@ func (p *PDULayer) SetFastPathSender(f core.FastPathSender) {
 type Client struct {
 	*PDULayer
 	clientCoreData *gcc.ClientCoreData
+	remoteAppMode  bool
+	enableCliprdr  bool
 }
 
 func NewClient(t core.Transport) *Client {
@@ -180,7 +192,12 @@ func (c *Client) sendConfirmActivePDU() {
 	pdu.SharedId = c.sharedId
 	pdu.NumberCapabilities = c.demandActivePDU.NumberCapabilities
 	for _, v := range c.clientCapabilities {
+		glog.Debugf("clientCapabilities: 0x%04x", v.Type())
 		pdu.CapabilitySets = append(pdu.CapabilitySets, v)
+	}
+	if c.remoteAppMode {
+		pdu.CapabilitySets = append(pdu.CapabilitySets, c.serverCapabilities[CAPSTYPE_RAIL])
+		pdu.CapabilitySets = append(pdu.CapabilitySets, c.serverCapabilities[CAPSTYPE_WINDOW])
 	}
 	pdu.LengthSourceDescriptor = c.demandActivePDU.LengthSourceDescriptor
 	pdu.SourceDescriptor = c.demandActivePDU.SourceDescriptor
@@ -213,6 +230,7 @@ func (c *Client) recvServerSynchronizePDU(s []byte) {
 		} else {
 			glog.Error("recvServerSynchronizePDU ignore message type", pdu.ShareCtrlHeader.PDUType)
 		}
+		glog.Infof("%+v", dataPdu)
 		c.transport.Once("data", c.recvServerSynchronizePDU)
 		return
 	}
@@ -288,14 +306,14 @@ func (c *Client) recvServerFontMapPDU(s []byte) {
 		}
 		return
 	}
-	c.transport.Once("data", c.recvPDU)
+	c.transport.On("data", c.recvPDU)
 	c.Emit("ready")
 }
 
 func (c *Client) recvPDU(s []byte) {
 	glog.Debug("PDU recvPDU", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
-	for r.Len() > 0 {
+	if r.Len() > 0 {
 		p, err := readPDU(r)
 		if err != nil {
 			glog.Error(err)

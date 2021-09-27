@@ -459,42 +459,87 @@ type SaveSessionInfo struct {
 	FieldsPresent uint32
 	LogonId       uint32
 	Random        []byte
-	//Pad   [570]byte
 }
 
+func (s *SaveSessionInfo) logonInfoV1(r io.Reader) (err error) {
+	core.ReadUInt32LE(r) // cbDomain
+	b, _ := core.ReadBytes(52, r)
+	domain := core.UnicodeDecode(b)
+
+	core.ReadUInt32LE(r) // cbUserName
+	b, _ = core.ReadBytes(512, r)
+	userName := core.UnicodeDecode(b)
+
+	sessionId, _ := core.ReadUInt32LE(r)
+	s.LogonId = sessionId
+	glog.Infof("SessionId:[%d] UserName:[%s] Domain:[%s]", s.LogonId, userName, domain)
+	return err
+}
+func (s *SaveSessionInfo) logonInfoV2(r io.Reader) (err error) {
+	core.ReadUint16LE(r)
+	core.ReadUInt32LE(r)
+	sessionId, _ := core.ReadUInt32LE(r)
+	s.LogonId = sessionId
+	cbDomain, _ := core.ReadUInt32LE(r)
+	cbUserName, _ := core.ReadUInt32LE(r)
+	core.ReadBytes(558, r)
+
+	b, _ := core.ReadBytes(int(cbDomain), r)
+	domain := core.UnicodeDecode(b)
+	b, _ = core.ReadBytes(int(cbUserName), r)
+	userName := core.UnicodeDecode(b)
+	glog.Infof("SessionId:[%d] UserName:[%s] Domain:[%s]", s.LogonId, userName, domain)
+
+	return err
+}
+func (s *SaveSessionInfo) logonPlainNotify(r io.Reader) (err error) {
+	core.ReadBytes(576, r) /* pad (576 bytes) */
+	return err
+}
+func (s *SaveSessionInfo) logonInfoExtended(r io.Reader) (err error) {
+	s.Length, err = core.ReadUint16LE(r)
+	s.FieldsPresent, err = core.ReadUInt32LE(r)
+	glog.Info("FieldsPresent:", s.FieldsPresent)
+	// auto reconnect cookie
+	if s.FieldsPresent&LOGON_EX_AUTORECONNECTCOOKIE != 0 {
+		core.ReadUInt32LE(r)
+		b, _ := core.ReadUInt32LE(r)
+		if b != 28 {
+			return errors.New(fmt.Sprintf("invalid length in Auto-Reconnect packet"))
+		}
+		b, _ = core.ReadUInt32LE(r)
+		if b != 1 {
+			return errors.New(fmt.Sprintf("unsupported version of Auto-Reconnect packet"))
+		}
+		b, _ = core.ReadUInt32LE(r)
+		s.LogonId = b
+		s.Random, _ = core.ReadBytes(16, r)
+	} else { // logon error info
+		core.ReadUInt32LE(r)
+		b, _ := core.ReadUInt32LE(r)
+		b, _ = core.ReadUInt32LE(r)
+		s.LogonId = b
+	}
+	core.ReadBytes(570, r)
+	return err
+}
 func (s *SaveSessionInfo) Unpack(r io.Reader) (err error) {
 	s.InfoType, err = core.ReadUInt32LE(r)
-	if err == nil && s.InfoType == INFOTYPE_LOGON_EXTENDED_INFO {
-		s.Length, err = core.ReadUint16LE(r)
-		s.FieldsPresent, err = core.ReadUInt32LE(r)
-		glog.Info("FieldsPresent:", s.FieldsPresent)
-		if s.FieldsPresent&LOGON_EX_AUTORECONNECTCOOKIE != 0 {
-			core.ReadUInt32LE(r)
-			b, _ := core.ReadUInt32LE(r)
-			if b != 28 {
-				return errors.New(fmt.Sprintf("invalid length in Auto-Reconnect packet"))
-			}
-			b, _ = core.ReadUInt32LE(r)
-			if b != 1 {
-				return errors.New(fmt.Sprintf("unsupported version of Auto-Reconnect packet"))
-			}
-			b, _ = core.ReadUInt32LE(r)
-			glog.Info("Session:", b)
-			s.LogonId = b
-			s.Random, _ = core.ReadBytes(16, r)
-			glog.Info("Random:", s.Random)
-		} else {
-			core.ReadUInt32LE(r)
-			b, _ := core.ReadUInt32LE(r)
-			glog.Info("ErrorNotificationType :", b)
-			b, _ = core.ReadUInt32LE(r)
-			glog.Info("Session:", b)
-			s.LogonId = b
-		}
-		core.ReadBytes(570, r)
+	switch s.InfoType {
+	case INFOTYPE_LOGON:
+		err = s.logonInfoV1(r)
+	case INFOTYPE_LOGON_LONG:
+		err = s.logonInfoV2(r)
+	case INFOTYPE_LOGON_PLAINNOTIFY:
+		err = s.logonPlainNotify(r)
+	case INFOTYPE_LOGON_EXTENDED_INFO:
+		err = s.logonInfoExtended(r)
+	default:
+		glog.Error("Unhandled saveSessionInfo type 0x%", s.InfoType)
+		return fmt.Errorf("Unhandled saveSessionInfo type 0x%", s.InfoType)
 	}
 
-	return
+	return err
 }
 
 func (*SaveSessionInfo) Type2() uint8 {

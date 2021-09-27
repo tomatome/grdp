@@ -141,7 +141,7 @@ const (
 	INPUT_FLAG_FASTPATH_INPUT2        = 0x0020
 	INPUT_FLAG_UNUSED1                = 0x0040
 	INPUT_FLAG_UNUSED2                = 0x0080
-	TS_INPUT_FLAG_MOUSE_HWHEEL        = 0x0100
+	INPUT_FLAG_MOUSE_HWHEEL           = 0x0100
 )
 
 /**
@@ -193,6 +193,19 @@ type SoundFlag uint16
 const (
 	SOUND_NONE       SoundFlag = 0x0000
 	SOUND_BEEPS_FLAG           = 0x0001
+)
+
+type RailsupportLevel uint32
+
+const (
+	RAIL_LEVEL_SUPPORTED                           = 0x00000001
+	RAIL_LEVEL_DOCKED_LANGBAR_SUPPORTED            = 0x00000002
+	RAIL_LEVEL_SHELL_INTEGRATION_SUPPORTED         = 0x00000004
+	RAIL_LEVEL_LANGUAGE_IME_SYNC_SUPPORTED         = 0x00000008
+	RAIL_LEVEL_SERVER_TO_CLIENT_IME_SYNC_SUPPORTED = 0x00000010
+	RAIL_LEVEL_HIDE_MINIMIZED_APPS_SUPPORTED       = 0x00000020
+	RAIL_LEVEL_WINDOW_CLOAKING_SUPPORTED           = 0x00000040
+	RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED              = 0x00000080
 )
 
 const (
@@ -574,6 +587,7 @@ func readCapability(r io.Reader) (Capability, error) {
 	}
 	capReader := bytes.NewReader(capBytes)
 	var c Capability
+	glog.Debugf("Capability type 0x%04x", capType)
 	switch CapsType(capType) {
 	case CAPSTYPE_GENERAL:
 		c = &GeneralCapability{}
@@ -637,5 +651,6 @@ func readCapability(r io.Reader) (Capability, error) {
 		glog.Error("Capability unpack error", err, fmt.Sprintf("0x%04x", capType), hex.EncodeToString(capBytes))
 		return nil, err
 	}
+	glog.Debugf("Capability: %+v", c)
 	return c, nil
 }
