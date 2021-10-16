@@ -11,6 +11,8 @@ import (
 	"math/big"
 	"unicode/utf16"
 
+	"github.com/lunixbochs/struc"
+
 	"github.com/tomatome/grdp/protocol/nla"
 
 	"github.com/tomatome/grdp/core"
@@ -677,29 +679,31 @@ func (c *Client) sendInfoPkt() {
 func (c *Client) recvLicenceInfo(s []byte) {
 	glog.Debug("sec recvLicenceInfo", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
-	if (readSecurityHeader(r).securityFlag & LICENSE_PKT) <= 0 {
+	h := readSecurityHeader(r)
+	if (h.securityFlag & LICENSE_PKT) == 0 {
 		c.Emit("error", errors.New("NODE_RDP_PROTOCOL_PDU_SEC_BAD_LICENSE_HEADER"))
 		return
 	}
 
 	p := lic.ReadLicensePacket(r)
-
 	switch p.BMsgtype {
 	case lic.NEW_LICENSE:
 		glog.Info("sec NEW_LICENSE")
 		c.Emit("success")
 		goto connect
 	case lic.ERROR_ALERT:
-		glog.Info("sec ERROR_ALERT")
 		message := p.LicensingMessage.(*lic.ErrorMessage)
+		glog.Info("sec ERROR_ALERT and ErrorCode:", message.DwErrorCode)
 		if message.DwErrorCode == lic.STATUS_VALID_CLIENT && message.DwStateTransaction == lic.ST_NO_TRANSITION {
 			goto connect
 		}
 		goto retry
 	case lic.LICENSE_REQUEST:
+		glog.Info("sec LICENSE_REQUEST")
 		c.sendClientNewLicenseRequest(p.LicensingMessage.([]byte))
 		goto retry
 	case lic.PLATFORM_CHALLENGE:
+		glog.Info("sec PLATFORM_CHALLENGE")
 		c.sendClientChallengeResponse(p.LicensingMessage.([]byte))
 		goto retry
 	default:
@@ -719,49 +723,108 @@ retry:
 }
 
 func (c *Client) sendClientNewLicenseRequest(data []byte) {
-	/*var
-		struc.Unpack(bytes.NewReader(data), )
-		//c.ServerSecurityData().ServerCertificate.DwVersion
-		 clientRandom := RandomString(32)
-	        preMasterSecret := RandomString(48)
-	        masterSecret := masterSecret(preMasterSecret, clientRandom, serverRandom)
-	        sessionKeyBlob := masterSecret(masterSecret, serverRandom, clientRandom)
-	        c.macSalt := sessionKeyBlob[:16]
-	        c.licenseKey := finalHash(sessionKeyBlob[16:32], clientRandom, serverRandom)
+	var req lic.ServerLicenseRequest
+	struc.Unpack(bytes.NewReader(data), &req)
 
-	        //format message
-	        message = &ClientNewLicenseRequest{}
-	        message.clientRandom = clientRandom
-	        message.encryptedPreMasterSecret.blobData = rsa.encrypt(preMasterSecret[::-1], serverCertificate.certData.getPublicKey())[::-1] + "\x00" * 8
-	        message.ClientMachineName.blobData = self._hostname + "\x00"
-	        message.ClientUserName.blobData = self._username + "\x00"
-	        c.sendFlagged(LICENSE_PKT, LicPacket(message))*/
+	var sc gcc.ServerCertificate
+	if c.ServerSecurityData().ServerCertificate.DwVersion != 0 {
+		sc = c.ServerSecurityData().ServerCertificate
+	} else {
+		rd := bytes.NewReader(req.ServerCertificate.BlobData)
+		err := sc.Unpack(rd)
+		if err != nil {
+			glog.Error(err)
+			return
+		}
+	}
+
+	serverRandom := req.ServerRandom
+	clientRandom := core.Random(32)
+	preMasterSecret := core.Random(48)
+	masSecret := masterSecret(preMasterSecret, clientRandom, serverRandom)
+	sessionKeyBlob := masterSecret(masSecret, serverRandom, clientRandom)
+	c.macKey = sessionKeyBlob[:16]
+	c.initialDecrytKey = finalHash(sessionKeyBlob[16:32], clientRandom, serverRandom)
+
+	//format message
+	message := &lic.ClientNewLicenseRequest{}
+	message.ClientRandom = clientRandom
+
+	buff := &bytes.Buffer{}
+
+	ePublicKey, mPublicKey := sc.CertData.GetPublicKey()
+	b := new(big.Int).SetBytes(core.Reverse(mPublicKey))
+	e := new(big.Int).SetInt64(int64(ePublicKey))
+	d := new(big.Int).SetBytes(core.Reverse(clientRandom))
+	r := new(big.Int).Exp(d, e, b)
+	var ret []byte
+	if len(b.Bytes()) > 0 {
+		ret = r.Bytes()[:len(b.Bytes())]
+	} else {
+		ln := len(r.Bytes())
+		if ln < 1 {
+			ln = 1
+		}
+		ret = r.Bytes()[:ln]
+	}
+	buff.Write(core.Reverse(ret))
+	buff.Write([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	message.EncryptedPreMasterSecret.BlobData = buff.Bytes()
+
+	buff.Reset()
+	buff.Write(c.ClientCoreData().ClientName[:])
+	buff.Write([]byte{0x00})
+	message.ClientMachineName.BlobData = buff.Bytes()
+
+	buff.Reset()
+	buff.Write(c.info.UserName)
+	buff.Write([]byte{0x00})
+	message.ClientUserName.BlobData = buff.Bytes()
+
+	buff.Reset()
+	struc.Pack(buff, message)
+
+	c.sendFlagged(LICENSE_PKT, b.Bytes())
 
 }
 
 func (c *Client) sendClientChallengeResponse(data []byte) {
-	/*var pc ServerPlatformChallenge
-		struc.Unpack(bytes.NewReader(data), &pc)
+	var pc lic.ServerPlatformChallenge
+	struc.Unpack(bytes.NewReader(data), &pc)
 
-		serverEncryptedChallenge = pc..blobData.value
-	        //decrypt server challenge
-	        //it should be TEST word in unicode format
-	        serverChallenge = rc4.crypt(rc4.RC4Key(self._licenseKey), serverEncryptedChallenge)
-	        if serverChallenge != "T\x00E\x00S\x00T\x00\x00\x00":
-	            raise InvalidExpectedDataException("bad license server challenge")
+	serverEncryptedChallenge := pc.EncryptedPlatformChallenge.BlobData
+	//decrypt server challenge
+	//it should be TEST word in unicode format
+	rc, _ := rc4.NewCipher(c.initialDecrytKey)
+	serverChallenge := make([]byte, 20)
+	rc.XORKeyStream(serverChallenge, serverEncryptedChallenge)
+	//if serverChallenge != "T\x00E\x00S\x00T\x00\x00\x00":
+	//raise InvalidExpectedDataException("bad license server challenge")
 
-	        #generate hwid
-	        s = Stream()
-	        s.writeType((UInt32Le(2), String(self._hostname + self._username + "\x00" * 16)))
-	        hwid = s.getvalue()[:20]
+	//generate hwid
+	b := &bytes.Buffer{}
+	b.Write(c.ClientCoreData().ClientName[:])
+	b.Write(c.info.UserName)
+	for i := 0; i < 2; i++ {
+		b.Write([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	}
+	hwid := b.Bytes()[:20]
 
-	        message = ClientPLatformChallengeResponse()
-	        message.encryptedPlatformChallengeResponse.blobData.value = serverEncryptedChallenge
-	        message.encryptedHWID.blobData.value = rc4.crypt(rc4.RC4Key(self._licenseKey), hwid)
-	        message.MACData.value = sec.macData(self._macSalt, serverChallenge + hwid)
+	encryptedHWID := make([]byte, 20)
+	rc.XORKeyStream(encryptedHWID, hwid)
 
-	        self._transport.sendFlagged(sec.SecurityFlag.SEC_LICENSE_PKT, LicPacket(message))
-		c.sendFlagged(LICENSE_PKT, lic.LicensePacket)*/
+	b.Reset()
+	b.Write(serverChallenge)
+	b.Write(hwid)
+
+	message := &lic.ClientPLatformChallengeResponse{}
+	message.EncryptedPlatformChallengeResponse.BlobData = serverEncryptedChallenge
+	message.EncryptedHWID.BlobData = encryptedHWID
+	message.MACData = macData(c.macKey, b.Bytes())[:16]
+
+	b.Reset()
+	struc.Pack(b, message)
+	c.sendFlagged(LICENSE_PKT, b.Bytes())
 }
 
 func (c *Client) recvData(s []byte) {
