@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tomatome/grdp/plugin/cliprdr"
 	"github.com/tomatome/grdp/protocol/rfb"
 
 	"github.com/tomatome/grdp/core"
@@ -62,15 +64,23 @@ func (g *Client) Login(domain, user, pwd string) error {
 
 	g.tpkt.SetFastPathListener(g.sec)
 	g.sec.SetFastPathListener(g.pdu)
-	g.pdu.SetFastPathSender(g.tpkt)
+	//g.x224.SetChannelSender(g.tpkt)
+	//g.mcs.SetChannelSender(g.x224)
+	g.sec.SetChannelSender(g.mcs)
+	//g.pdu.SetFastPathSender(g.tpkt)
 
 	//g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
-	//g.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
+	g.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
 
 	err = g.x224.Connect()
 	if err != nil {
 		return fmt.Errorf("[x224 connect err] %v", err)
 	}
+	c := &cliprdr.CliprdrClient{}
+	c.SetSender(g.sec)
+	g.sec.On(c.GetType(), func(s []byte) {
+		c.Handle(s)
+	})
 	glog.Info("wait connect ok")
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -90,7 +100,7 @@ func (g *Client) Login(domain, user, pwd string) error {
 	}).On("ready", func() {
 		glog.Info("on ready")
 	}).On("update", func(rectangles []pdu.BitmapData) {
-		glog.Info("on update:", rectangles)
+		glog.Info("on update bitmap:", len(rectangles))
 	})
 
 	wg.Wait()
@@ -133,11 +143,32 @@ func (g *Client) LoginVNC() error {
 	return err
 }
 
+var (
+	ip       string
+	domain   string
+	user     string
+	passwd   string
+	loglevel int
+)
+
 func main() {
-	g := NewClient("192.168.18.107:3389", glog.DEBUG)
-	err := g.Login("", "wren", "wren")
+	flag.StringVar(&ip, "m", "localhost:3389", "ip:port")
+	flag.StringVar(&domain, "d", "", "domain")
+	flag.StringVar(&user, "u", "", "user")
+	flag.StringVar(&passwd, "p", "", "passwd")
+	flag.IntVar(&loglevel, "l", 1, "debug:0 info:1 warn:2 error:3")
+	flag.Parse()
+	if user == "" || passwd == "" {
+		fmt.Println("user and passwd empty")
+		os.Exit(-1)
+	}
+	g := NewClient(ip, glog.LEVEL(loglevel))
+	err := g.Login(domain, user, passwd)
+	//g := NewClient("192.168.0.132:3389", glog.LEVEL(loglevel))
+	//err := g.Login("", "administrator", "Jhadmin123")
 	//g := NewClient("192.168.18.100:5902", glog.DEBUG)
 	//err := g.LoginVNC()
+
 	if err != nil {
 		fmt.Println("Login:", err)
 	}
