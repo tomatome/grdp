@@ -8,6 +8,10 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/tomatome/grdp/plugin/cliprdr"
+
+	"github.com/tomatome/grdp/plugin"
+
 	"github.com/tomatome/grdp/core"
 	"github.com/tomatome/grdp/glog"
 	"github.com/tomatome/grdp/protocol/nla"
@@ -26,15 +30,16 @@ const (
 )
 
 type RdpClient struct {
-	Host   string // ip:port
-	Width  int
-	Height int
-	info   *Info
-	tpkt   *tpkt.TPKT
-	x224   *x224.X224
-	mcs    *t125.MCSClient
-	sec    *sec.Client
-	pdu    *pdu.Client
+	Host     string // ip:port
+	Width    int
+	Height   int
+	info     *Info
+	tpkt     *tpkt.TPKT
+	x224     *x224.X224
+	mcs      *t125.MCSClient
+	sec      *sec.Client
+	pdu      *pdu.Client
+	channels *plugin.Channels
 }
 
 func NewRdpClient(host string, width, height int, logLevel glog.LEVEL) *RdpClient {
@@ -63,18 +68,21 @@ func uiRdp(info *Info) (error, *RdpClient) {
 		fmt.Println("Login:", err)
 		return err, nil
 	}
+	cc := cliprdr.NewCliprdrClient()
+	g.channels.Register(cc)
 
 	g.pdu.On("error", func(e error) {
-		fmt.Println("on error:", e)
+		glog.Info("on error:", e)
 	}).On("close", func() {
 		err = errors.New("close")
-		fmt.Println("on close")
+		glog.Info("on close")
 	}).On("success", func() {
-		fmt.Println("on success")
+		glog.Info("on success")
 	}).On("ready", func() {
-		fmt.Println("on ready")
+		glog.Info("on ready")
+
 	}).On("update", func(rectangles []pdu.BitmapData) {
-		glog.Info(time.Now(), "on update Bitmap:", len(rectangles))
+		glog.Info("on update Bitmap:", len(rectangles))
 		bs := make([]Bitmap, 0, 50)
 		for _, v := range rectangles {
 			IsCompress := v.IsCompress()
@@ -111,17 +119,19 @@ func (g *RdpClient) Login() error {
 	g.mcs = t125.NewMCSClient(g.x224)
 	g.sec = sec.NewClient(g.mcs)
 	g.pdu = pdu.NewClient(g.sec)
+	g.channels = plugin.NewChannels(g.sec)
 
 	g.mcs.SetClientCoreData(uint16(g.Width), uint16(g.Height))
 
 	g.sec.SetUser(user)
 	g.sec.SetPwd(pwd)
 	g.sec.SetDomain(domain)
-	//g.sec.SetClientAutoReconnect(3, core.Random(16))
 
 	g.tpkt.SetFastPathListener(g.sec)
 	g.sec.SetFastPathListener(g.pdu)
-	g.pdu.SetFastPathSender(g.tpkt)
+	g.sec.SetChannelSender(g.mcs)
+	g.channels.SetChannelSender(g.sec)
+	//g.pdu.SetFastPathSender(g.tpkt)
 
 	//g.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
 	//g.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
@@ -130,7 +140,6 @@ func (g *RdpClient) Login() error {
 	if err != nil {
 		return fmt.Errorf("[x224 connect err] %v", err)
 	}
-	glog.Info("wait connect ok")
 	return nil
 }
 

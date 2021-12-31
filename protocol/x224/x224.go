@@ -105,6 +105,7 @@ func (x *ClientConnectionRequestPDU) Serialize() []byte {
 		core.WriteUInt16LE(0x0A0D, buff)
 	}
 	struc.Pack(buff, x.ProtocolNeg)
+
 	return buff.Bytes()
 }
 

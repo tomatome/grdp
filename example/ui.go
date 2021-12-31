@@ -85,11 +85,10 @@ func appMain(driver gxui.Driver) {
 	user.SetDesiredWidth(width / 4)
 	passwd.SetDesiredWidth(width / 4)
 	//ip.SetText("192.168.18.100:5902")
-	ip.SetText("192.168.0.132:3389")
-	user.SetText("administrator")
-	//user.SetText("wren")
-	passwd.SetText("Jhadmin123")
-	//passwd.SetText("wren")
+	//ip.SetText("192.168.2.207:3389")
+	//user.SetText("administrator")
+	//user.SetText("test")
+	//passwd.SetText("test")
 
 	bok := theme.CreateButton()
 	bok.SetText("OK")
@@ -106,7 +105,6 @@ func appMain(driver gxui.Driver) {
 			fmt.Println(err.Error())
 			return
 		}
-		glog.Info("ok:", gc)
 		layout.SetVisible(false)
 		layoutImg.SetVisible(true)
 		ip.GainedFocus()
@@ -118,6 +116,7 @@ func appMain(driver gxui.Driver) {
 		user.SetText("")
 		passwd.SetText("")
 	})
+
 	blayout := theme.CreateLinearLayout()
 	blayout.AddChild(bok)
 	blayout.AddChild(bcancel)

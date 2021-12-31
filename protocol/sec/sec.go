@@ -279,12 +279,8 @@ func (s *SEC) Write(b []byte) (n int, err error) {
 		return s.transport.Write(b)
 	}
 
-	var flag uint16 = ENCRYPT
-	if s.enableSecureCheckSum {
-		flag |= SECURE_CHECKSUM
-	}
-
-	return s.sendFlagged(flag, b)
+	data := s.encrytData(b)
+	return s.transport.Write(data)
 }
 
 func (s *SEC) Close() error {
@@ -293,19 +289,8 @@ func (s *SEC) Close() error {
 
 func (s *SEC) sendFlagged(flag uint16, data []byte) (n int, err error) {
 	glog.Debug("sendFlagged:", hex.EncodeToString(data))
-
-	if flag&ENCRYPT != 0 {
-		data = s.writeEncryptedPayload(data, flag&SECURE_CHECKSUM != 0)
-	}
-
-	buff := &bytes.Buffer{}
-	core.WriteUInt16LE(flag, buff)
-	core.WriteUInt16LE(0, buff)
-	core.WriteBytes(data, buff)
-
-	glog.Debug("sendFlagged end:", hex.EncodeToString(buff.Bytes()))
-
-	return s.transport.Write(buff.Bytes())
+	b := s.encryt(flag, data)
+	return s.transport.Write(b)
 }
 
 /*
@@ -343,13 +328,13 @@ func macData(macSaltKey, data []byte) []byte {
 func (s *SEC) readEncryptedPayload(data []byte, checkSum bool) []byte {
 	r := bytes.NewReader(data)
 	sign, _ := core.ReadBytes(8, r)
-	glog.Info("read sign:", sign)
+	glog.Debug("read sign:", sign)
 	encryptedPayload, _ := core.ReadBytes(r.Len(), r)
 	if s.decryptRc4 == nil {
 		s.decryptRc4, _ = rc4.NewCipher(s.currentDecrytKey)
 	}
 	s.nbDecryptedPacket++
-	glog.Info("nbDecryptedPacket:", s.nbDecryptedPacket)
+	glog.Debug("nbDecryptedPacket:", s.nbDecryptedPacket)
 	plaintext := make([]byte, len(encryptedPayload))
 	s.decryptRc4.XORKeyStream(plaintext, encryptedPayload)
 
@@ -366,7 +351,7 @@ func (s *SEC) writeEncryptedPayload(data []byte, checkSum bool) []byte {
 	}
 
 	s.nbEncryptedPacket++
-	glog.Info("nbEncryptedPacket:", s.nbEncryptedPacket)
+	glog.Debug("nbEncryptedPacket:", s.nbEncryptedPacket)
 	b := &bytes.Buffer{}
 
 	sign := macData(s.macKey, data)[:8]
@@ -382,6 +367,45 @@ func (s *SEC) writeEncryptedPayload(data []byte, checkSum bool) []byte {
 	return b.Bytes()
 }
 
+func (s *SEC) encryt(flag uint16, b []byte) []byte {
+	data := b
+	if flag&ENCRYPT != 0 {
+		data = s.writeEncryptedPayload(b, flag&SECURE_CHECKSUM != 0)
+	}
+	buff := &bytes.Buffer{}
+	core.WriteUInt16LE(flag, buff)
+	core.WriteUInt16LE(0, buff)
+	core.WriteBytes(data, buff)
+
+	return buff.Bytes()
+}
+func (s *SEC) encrytData(b []byte) []byte {
+	if !s.enableEncryption {
+		return b
+	}
+
+	var flag uint16 = ENCRYPT
+	if s.enableSecureCheckSum {
+		flag |= SECURE_CHECKSUM
+	}
+	return s.encryt(flag, b)
+}
+
+func (s *SEC) decrytData(b []byte) []byte {
+	if !s.enableEncryption {
+		return b
+	}
+
+	r := bytes.NewReader(b)
+	securityFlag, _ := core.ReadUint16LE(r)
+	_, _ = core.ReadUint16LE(r) //securityFlagHi
+	data, _ := core.ReadBytes(r.Len(), r)
+	if securityFlag&ENCRYPT != 0 {
+		data = s.readEncryptedPayload(data, securityFlag&SECURE_CHECKSUM != 0)
+	}
+	return data
+}
+
 type Client struct {
 	*SEC
 	userId    uint16
@@ -391,6 +415,7 @@ type Client struct {
 	initialEncryptKey []byte
 
 	fastPathListener core.FastPathListener
+	channelSender    core.ChannelSender
 }
 
 func NewClient(t core.Transport) *Client {
@@ -452,7 +477,7 @@ func (c *Client) connect(clientData []interface{}, serverData []interface{}, use
 	c.userId = userId
 	for _, channel := range channels {
 		glog.Debug("channel:", channel.Name, channel.ID)
-		if channel.Name == "global" {
+		if channel.Name == t125.GLOBAL_CHANNEL_NAME {
 			c.channelId = channel.ID
 			break
 		}
@@ -464,7 +489,7 @@ func (c *Client) connect(clientData []interface{}, serverData []interface{}, use
 	}
 
 	c.sendInfoPkt()
-	c.transport.Once("global", c.recvLicenceInfo)
+	c.transport.Once("sec", c.recvLicenceInfo)
 }
 
 func (c *Client) ClientCoreData() *gcc.ClientCoreData {
@@ -582,13 +607,13 @@ func generateKeys(clientRandom, serverRandom []byte, method uint32) ([]byte, []b
 	b.Write(clientRandom[:24])
 	b.Write(serverRandom[:24])
 	preMasterHash := b.Bytes()
-	glog.Info("preMasterHash:", string(preMasterHash))
+	glog.Debug("preMasterHash:", hex.EncodeToString(preMasterHash))
 
 	masterHash := masterSecret(preMasterHash, clientRandom, serverRandom)
-	glog.Info("masterHash:", hex.EncodeToString(masterHash))
+	glog.Debug("masterHash:", hex.EncodeToString(masterHash))
 
 	sessionKey := sessionKeyBlob(masterHash, clientRandom, serverRandom)
-	glog.Info("sessionKey:", hex.EncodeToString(sessionKey))
+	glog.Debug("sessionKey:", hex.EncodeToString(sessionKey))
 
 	macKey128 := sessionKey[:16]
 	initialFirstKey128 := finalHash(sessionKey[16:32], clientRandom, serverRandom)
@@ -625,10 +650,10 @@ func (c *Client) sendClientRandom() {
 	glog.Info("send Client Random")
 
 	clientRandom := core.Random(32)
-	glog.Info("clientRandom:", string(clientRandom))
+	glog.Info("clientRandom:", hex.EncodeToString(clientRandom))
 
 	serverRandom := c.ServerSecurityData().ServerRandom
-	glog.Info("ServerRandom:", string(serverRandom))
+	glog.Info("ServerRandom:", hex.EncodeToString(serverRandom))
 
 	c.macKey, c.initialDecrytKey, c.initialEncryptKey = generateKeys(clientRandom,
 		serverRandom, c.ServerSecurityData().EncryptionMethod)
@@ -648,7 +673,7 @@ func (c *Client) sendClientRandom() {
 	d := new(big.Int).SetBytes(core.Reverse(clientRandom))
 	r := new(big.Int).Exp(d, e, b)
 	var ret []byte
-	if len(b.Bytes()) > 0 {
+	if len(b.Bytes()) > 0 && len(r.Bytes()) > len(b.Bytes()) {
 		ret = r.Bytes()[:len(b.Bytes())]
 	} else {
 		ln := len(r.Bytes())
@@ -676,7 +701,7 @@ func (c *Client) sendInfoPkt() {
 	c.sendFlagged(secFlag, c.info.Serialize(c.ClientCoreData().RdpVersion == gcc.RDP_VERSION_5_PLUS))
 }
 
-func (c *Client) recvLicenceInfo(s []byte) {
+func (c *Client) recvLicenceInfo(channel string, s []byte) {
 	glog.Debug("sec recvLicenceInfo", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
 	h := readSecurityHeader(r)
@@ -713,12 +738,12 @@ func (c *Client) recvLicenceInfo(s []byte) {
 	}
 
 connect:
-	c.transport.On("global", c.recvData)
+	c.transport.On("sec", c.recvData)
 	c.Emit("connect", c.clientData[0].(*gcc.ClientCoreData), c.userId, c.channelId)
 	return
 
 retry:
-	c.transport.Once("global", c.recvLicenceInfo)
+	c.transport.Once("sec", c.recvLicenceInfo)
 	return
 }
 
@@ -827,21 +852,15 @@ func (c *Client) sendClientChallengeResponse(data []byte) {
 	c.sendFlagged(LICENSE_PKT, b.Bytes())
 }
 
-func (c *Client) recvData(s []byte) {
+func (c *Client) recvData(channel string, s []byte) {
 	glog.Debug("sec recvData", hex.EncodeToString(s))
-	if !c.enableEncryption {
-		c.Emit("data", s)
+	glog.Debug(channel, len(s), ":", s)
+	data := c.decrytData(s)
+	if channel != t125.GLOBAL_CHANNEL_NAME {
+		c.Emit("channel", channel, data)
 		return
 	}
-
-	r := bytes.NewReader(s)
-	securityFlag, _ := core.ReadUint16LE(r)
-	_, _ = core.ReadUint16LE(r) //securityFlagHi
-	s1, _ := core.ReadBytes(r.Len(), r)
-	if securityFlag&ENCRYPT != 0 {
-		data := c.readEncryptedPayload(s1, securityFlag&SECURE_CHECKSUM != 0)
-		c.Emit("data", data)
-	}
+	c.Emit("data", data)
 }
 func (c *Client) SetFastPathListener(f core.FastPathListener) {
 	c.fastPathListener = f
@@ -853,4 +872,27 @@ func (c *Client) RecvFastPath(secFlag byte, s []byte) {
 		data = c.readEncryptedPayload(s, secFlag&FASTPATH_OUTPUT_SECURE_CHECKSUM != 0)
 	}
 	c.fastPathListener.RecvFastPath(secFlag, data)
+}
+
+func (c *Client) SetChannelSender(f core.ChannelSender) {
+	c.channelSender = f
+}
+
+func (c *Client) SendToChannel(channel string, b []byte) (int, error) {
+	if !c.enableEncryption {
+		glog.Debug("Sec Client write", hex.EncodeToString(b))
+		return c.channelSender.SendToChannel(channel, b)
+	}
+	var flag uint16 = ENCRYPT
+	if c.enableSecureCheckSum {
+		flag |= SECURE_CHECKSUM
+	}
+	data := c.writeEncryptedPayload(b, c.enableSecureCheckSum)
+
+	buff := &bytes.Buffer{}
+	core.WriteUInt16LE(flag, buff)
+	core.WriteUInt16LE(0, buff)
+	core.WriteBytes(data, buff)
+	glog.Debug("Sec Client write", channel, hex.EncodeToString(buff.Bytes()))
+	return c.channelSender.SendToChannel(channel, buff.Bytes())
 }

@@ -19,3 +19,7 @@ type FastPathListener interface {
 type FastPathSender interface {
 	SendFastPath(secFlag byte, s []byte) (int, error)
 }
+
+type ChannelSender interface {
+	SendToChannel(channel string, s []byte) (int, error)
+}

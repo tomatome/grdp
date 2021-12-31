@@ -1,7 +1,7 @@
 // tab.go
 package main
 
-import (
+/*import (
 	"fmt"
 )
 
@@ -36,4 +36,4 @@ func (e *TabbedEditor) CreatePanelTab() mixins.PanelTab {
 	})
 
 	return tab
-}
+}*/

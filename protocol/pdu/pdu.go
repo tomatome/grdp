@@ -117,8 +117,6 @@ func (p *PDULayer) SetFastPathSender(f core.FastPathSender) {
 type Client struct {
 	*PDULayer
 	clientCoreData *gcc.ClientCoreData
-	remoteAppMode  bool
-	enableCliprdr  bool
 }
 
 func NewClient(t core.Transport) *Client {
@@ -195,10 +193,7 @@ func (c *Client) sendConfirmActivePDU() {
 		glog.Debugf("clientCapabilities: 0x%04x", v.Type())
 		pdu.CapabilitySets = append(pdu.CapabilitySets, v)
 	}
-	if c.remoteAppMode {
-		pdu.CapabilitySets = append(pdu.CapabilitySets, c.serverCapabilities[CAPSTYPE_RAIL])
-		pdu.CapabilitySets = append(pdu.CapabilitySets, c.serverCapabilities[CAPSTYPE_WINDOW])
-	}
+
 	pdu.LengthSourceDescriptor = c.demandActivePDU.LengthSourceDescriptor
 	pdu.SourceDescriptor = c.demandActivePDU.SourceDescriptor
 	pdu.LengthCombinedCapabilities = c.demandActivePDU.LengthCombinedCapabilities
@@ -320,7 +315,7 @@ func (c *Client) recvPDU(s []byte) {
 			return
 		}
 		if p.ShareCtrlHeader.PDUType == PDUTYPE_DEACTIVATEALLPDU {
-			c.transport.On("data", c.recvDemandActivePDU)
+			c.transport.Once("data", c.recvDemandActivePDU)
 		}
 	}
 }

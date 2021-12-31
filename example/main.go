@@ -17,7 +17,7 @@ var (
 )
 
 func init() {
-	glog.SetLevel(glog.DEBUG)
+	glog.SetLevel(glog.INFO)
 	logger := log.New(os.Stdout, "", 0)
 	glog.SetLogger(logger)
 }
