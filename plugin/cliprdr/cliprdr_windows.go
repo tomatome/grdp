@@ -83,9 +83,9 @@ func ClipWatcher(c *CliprdrClient) {
 		WndProc: syscall.NewCallback(func(hwnd w32.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 			switch msg {
 			case w32.WM_CLIPBOARDUPDATE:
-				glog.Info("WM_CLIPBOARDUPDATE wParam:", wParam)
-				glog.Info("IsClipboardOwner:", IsClipboardOwner(win.HWND(c.hwnd)))
-				glog.Info("OleIsCurrentClipboard:", OleIsCurrentClipboard(c.dataObject))
+				glog.Info("info: WM_CLIPBOARDUPDATE wParam:", wParam)
+				glog.Debug("IsClipboardOwner:", IsClipboardOwner(win.HWND(c.hwnd)))
+				glog.Debug("OleIsCurrentClipboard:", OleIsCurrentClipboard(c.dataObject))
 				if !IsClipboardOwner(win.HWND(c.hwnd)) && int(wParam) != 0 &&
 					!OleIsCurrentClipboard(c.dataObject) {
 					c.sendFormatListPDU()
@@ -98,7 +98,7 @@ func ClipWatcher(c *CliprdrClient) {
 				})
 
 			case w32.WM_RENDERFORMAT:
-				glog.Info("WM_RENDERFORMAT wParam:", wParam)
+				glog.Info("info: WM_RENDERFORMAT wParam:", wParam)
 				formatId := uint32(wParam)
 				c.sendFormatDataRequest(formatId)
 				b := <-c.reply
@@ -106,7 +106,7 @@ func ClipWatcher(c *CliprdrClient) {
 				SetClipboardData(formatId, hmem)
 
 			case WM_CLIPRDR_MESSAGE:
-				glog.Info("WM_CLIPRDR_MESSAGE wParam:", wParam)
+				glog.Info("info: WM_CLIPRDR_MESSAGE wParam:", wParam)
 				if wParam == OLE_SETCLIPBOARD {
 					if !OleIsCurrentClipboard(c.dataObject) {
 						o := CreateDataObject(c)

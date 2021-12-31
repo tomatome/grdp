@@ -283,7 +283,6 @@ func (c *Channels) process(channel string, s []byte) {
 		if flags&CHANNEL_FLAG_FIRST != 0 {
 			c.buff.Reset()
 		}
-		glog.Infof("r.Len():%d", r.Len())
 		b, _ := core.ReadBytes(r.Len(), r)
 		c.buff.Write(b)
 		if flags&CHANNEL_FLAG_LAST == 0 {

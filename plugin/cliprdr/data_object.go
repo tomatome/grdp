@@ -4,6 +4,7 @@
 package cliprdr
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"reflect"
@@ -458,7 +459,7 @@ func (i *DataInstance) GetData(formatEtc *FORMATETC, medium *STGMEDIUM) uintptr 
 	if idx == -1 {
 		return E_FORMATETC
 	}
-	glog.Infof("GetData:%+v, %s", formatEtc.CFormat, GetClipboardFormatName(formatEtc.CFormat))
+	glog.Debugf("GetData:%+v, %s", formatEtc.CFormat, GetClipboardFormatName(formatEtc.CFormat))
 
 	medium.Tymed = i.formatEtc[idx].Tymed
 
@@ -699,8 +700,7 @@ func newStream(index uint32, data interface{}, dsc *FileDescriptor) *StreamInsta
 	instance.dsc = *dsc
 	instance.data = data
 	instance.index = index
-	glog.Info(instance.dsc.hasFileSize(), instance.dsc.isDir())
-	if instance.dsc.hasFileSize() && !instance.dsc.isDir() {
+	if !instance.dsc.hasFileSize() && !instance.dsc.isDir() {
 		c := data.(*CliprdrClient)
 		var r CliprdrFileContentsRequest
 		r.StreamId = instance.streamId
@@ -710,6 +710,11 @@ func newStream(index uint32, data interface{}, dsc *FileDescriptor) *StreamInsta
 		c.sendFormatContentsRequest(r)
 		b := <-c.reply
 		instance.lSize.QuadPart = core.BytesToUint64(b)
+	} else {
+		b := &bytes.Buffer{}
+		core.WriteUInt32LE(dsc.FileSizeLow, b)
+		core.WriteUInt32LE(dsc.FileSizeHigh, b)
+		instance.lSize.QuadPart = core.BytesToUint64(b.Bytes())
 	}
 
 	return &instance
@@ -763,7 +768,7 @@ func (i *StreamInstance) Read(pv uintptr, cb uint32, cbRead *uint32) uintptr {
 	win.RtlCopyMemory(pv, uintptr(unsafe.Pointer(&b[0])), win.SIZE_T(len(b)))
 	*cbRead = uint32(len(b))
 	i.lOffset.QuadPart += uint64(len(b))
-	glog.Info("StreamInstance Read:", *cbRead, cb)
+	glog.Debug("StreamInstance Read:", *cbRead, cb)
 	if *cbRead < cb {
 		return 1
 	}
@@ -775,7 +780,7 @@ func (i *StreamInstance) Write(pv uintptr, cb uint32, cbWritten *uint32) uintptr
 }
 
 func (i *StreamInstance) Seek(dlibMove LARGE_INTEGER, dwOrigin uint32, plibNewPosition *ULARGE_INTEGER) uintptr {
-	glog.Info("StreamInstance Seek:", dwOrigin, dlibMove, plibNewPosition)
+	glog.Debug("StreamInstance Seek:", dwOrigin, dlibMove, plibNewPosition)
 	var newoffset uint64 = i.lOffset.QuadPart
 	switch dwOrigin {
 	case STREAM_SEEK_SET:
@@ -793,7 +798,7 @@ func (i *StreamInstance) Seek(dlibMove LARGE_INTEGER, dwOrigin uint32, plibNewPo
 	default:
 		return E_INVALIDARG
 	}
-	glog.Info("StreamInstance Seek:", newoffset, i.lSize.QuadPart)
+	glog.Debug("StreamInstance Seek:", newoffset, i.lSize.QuadPart)
 	if newoffset < 0 || newoffset >= i.lSize.QuadPart {
 		return 1
 	}

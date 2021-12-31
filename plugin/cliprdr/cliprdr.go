@@ -712,7 +712,7 @@ func (c *CliprdrClient) sendFormatDataResponse(b []byte) {
 
 func (c *CliprdrClient) sendFormatContentsRequest(r CliprdrFileContentsRequest) uint32 {
 	glog.Info("Send Format Contents Request")
-	glog.Infof("r:%+v", r)
+	glog.Debugf("Format Contents Request:%+v", r)
 	header := NewCliprdrPDUHeader(CB_FILECONTENTS_REQUEST, 0, 28)
 
 	buff := &bytes.Buffer{}
