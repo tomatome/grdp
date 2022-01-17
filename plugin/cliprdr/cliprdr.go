@@ -85,10 +85,6 @@ const (
 	FILECONTENTS_RANGE = 0x00000002
 )
 
-const (
-	CLIPRDR_SVC_CHANNEL_NAME = "cliprdr"
-)
-
 type CliprdrPDUHeader struct {
 	MsgType  uint16 `struc:"little"`
 	MsgFlags uint16 `struc:"little"`
@@ -337,7 +333,7 @@ func (c *CliprdrClient) Sender(f core.ChannelSender) {
 	c.w = f
 }
 func (c *CliprdrClient) GetType() (string, uint32) {
-	return CLIPRDR_SVC_CHANNEL_NAME, plugin.CHANNEL_OPTION_INITIALIZED | plugin.CHANNEL_OPTION_ENCRYPT_RDP |
+	return plugin.CLIPRDR_SVC_CHANNEL_NAME, plugin.CHANNEL_OPTION_INITIALIZED | plugin.CHANNEL_OPTION_ENCRYPT_RDP |
 		plugin.CHANNEL_OPTION_COMPRESS_RDP | plugin.CHANNEL_OPTION_SHOW_PROTOCOL
 }
 

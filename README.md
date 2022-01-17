@@ -11,7 +11,7 @@ Forked from icodeface/grdp
 * [x] Standard RDP Authentication
 * [x] SSL Authentication
 * [x] NTLMv2 Authentication
-* [x] windows Clipboard
+* [x] Windows Clipboard
 * [ ] RDP Client(ugly)
 * [ ] VNC Client(unfinished)
 
