@@ -2,7 +2,7 @@
 
 grdp is a pure Golang implementation of the Microsoft RDP (Remote Desktop Protocol) protocol (**client side authorization only**).
 
-Forked from icodeface/grdp
+Forked from [icodeface/grdp](https://github.com/icodeface/grdp)
 
 ## Status
 
