@@ -2,7 +2,6 @@
 package client
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -106,7 +105,6 @@ func (c *Client) OnReady(f func()) {
 }
 func (c *Client) OnBitmap(f func([]Bitmap)) {
 	f1 := func(data interface{}) {
-		fmt.Println(data)
 		bs := make([]Bitmap, 0, 50)
 		if c.tc == TC_VNC {
 			br := data.(*rfb.BitRect)
