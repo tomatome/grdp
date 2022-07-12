@@ -60,7 +60,7 @@ func (c *RdpClient) Login(host, user, pwd string, width, height int) error {
 	c.pdu = pdu.NewClient(c.sec)
 	c.channels = plugin.NewChannels(c.sec)
 
-	c.mcs.SetClientDesktop(uint16(width), uint16(height))
+	c.mcs.SetClientCoreData(uint16(width), uint16(height))
 
 	c.sec.SetUser(user)
 	c.sec.SetPwd(pwd)
