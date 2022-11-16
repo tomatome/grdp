@@ -17,10 +17,6 @@ func (c *VncClient) Connect() error {
 	return nil
 }
 
-func newVncClient(s *Setting) *VncClient {
-	return &VncClient{}
-}
-
 func (c *VncClient) Login(host, user, pwd string, width, height int) error {
 	conn, err := net.DialTimeout("tcp", host, 3*time.Second)
 	if err != nil {
