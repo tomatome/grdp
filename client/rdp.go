@@ -68,6 +68,14 @@ func (c *RdpClient) WithRequestedProtocol(protocol string) {
 	c.requestedProtocol = protocol
 }
 
+func NewRdpClient(host, port, domain, username, password string) *RdpClient {
+	return &RdpClient{
+		host: host, port: port, domain: domain,
+		username: username, password: password,
+		windowHeight: 600, windowWidth: 800,
+	}
+}
+
 func bitmapDecompress(bitmap *pdu.BitmapData) []byte {
 	return core.Decompress(bitmap.BitmapDataStream, int(bitmap.Width), int(bitmap.Height), Bpp(bitmap.BitsPerPixel))
 }
