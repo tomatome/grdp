@@ -245,6 +245,26 @@ func (c *RdpClient) Close() {
 	}
 }
 
+func (c *RdpClient) OnBitmap(handler func([]Bitmap)) {
+	bitmapsFunc := func(data interface{}) {
+		bs := make([]Bitmap, 0, 50)
+		for _, v := range data.([]pdu.BitmapData) {
+			IsCompress := v.IsCompress()
+			stream := v.BitmapDataStream
+			if IsCompress {
+				stream = bitmapDecompress(&v)
+				IsCompress = false
+			}
+
+			b := Bitmap{int(v.DestLeft), int(v.DestTop), int(v.DestRight), int(v.DestBottom),
+				int(v.Width), int(v.Height), Bpp(v.BitsPerPixel), IsCompress, stream}
+			bs = append(bs, b)
+		}
+		handler(bs)
+	}
+	c.On("update", bitmapsFunc)
+}
+
 func newRdpClient(s *Setting) *RdpClient {
 	return &RdpClient{}
 }
