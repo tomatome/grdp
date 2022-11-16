@@ -33,4 +33,9 @@ func TestClientConnect(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
+	c.OnBitmap(func(bitmaps []Bitmap) {
+		fmt.Printf("Ready %d bitmaps\n", len(bitmaps))
+		fmt.Println("Ready: ", bitmaps)
+	})
+	time.Sleep(100 * time.Second)
 }
