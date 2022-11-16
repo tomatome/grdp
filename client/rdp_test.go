@@ -2,7 +2,6 @@ package client
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"testing"
 	"time"
@@ -37,9 +36,8 @@ func getPassword() string {
 }
 
 func TestClientLogin(t *testing.T) {
-	addr := net.JoinHostPort(getHost(), getPort())
-	c := NewClient(addr, getUsername(), getPassword(), TC_RDP, nil)
-	err := c.Login()
+	c := NewRdpClient(getHost(), getPort(), getDomain(), getUsername(), getPassword())
+	err := c.Login(getHost(), getUsername(), getPassword(), 800, 600)
 	if err != nil {
 		fmt.Println("Login:", err)
 	}

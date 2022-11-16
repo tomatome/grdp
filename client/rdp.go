@@ -264,7 +264,3 @@ func (c *RdpClient) OnBitmap(handler func([]Bitmap)) {
 	}
 	c.On("update", bitmapsFunc)
 }
-
-func newRdpClient(s *Setting) *RdpClient {
-	return &RdpClient{}
-}
