@@ -2,13 +2,43 @@ package client
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"testing"
 	"time"
 )
 
+func getHost() string {
+	return os.Getenv("RDP_HOST")
+}
+
+func getPort() string {
+	port := os.Getenv("RDP_POST")
+	if port == "" {
+		port = "3389"
+	}
+	return port
+}
+
+func getDomain() string {
+	return os.Getenv("RDP_DOMAIN")
+}
+
+func getUsername() string {
+	username := os.Getenv("RDP_USERNAME")
+	if username == "" {
+		username = "administrator"
+	}
+	return username
+}
+
+func getPassword() string {
+	return os.Getenv("RDP_PASSWORD")
+}
+
 func TestClientLogin(t *testing.T) {
-	c := NewClient("192.168.0.132:3389", "administrator", "Jhadmin123", TC_RDP, nil)
+	addr := net.JoinHostPort(getHost(), getPort())
+	c := NewClient(addr, getUsername(), getPassword(), TC_RDP, nil)
 	err := c.Login()
 	if err != nil {
 		fmt.Println("Login:", err)
@@ -20,14 +50,11 @@ func TestClientLogin(t *testing.T) {
 }
 
 func TestClientConnect(t *testing.T) {
-	host := os.Getenv("RDP_HOST")
-	port := os.Getenv("RDP_POST")
-	if port == "" {
-		port = "3389"
-	}
-	domain := os.Getenv("RDP_DOMAIN")
-	username := os.Getenv("RDP_USERNAME")
-	password := os.Getenv("RDP_PASSWORD")
+	host := getHost()
+	port := getPort()
+	domain := getDomain()
+	username := getUsername()
+	password := getPassword()
 	c := NewRdpClient(host, port, domain, username, password)
 	err := c.Connect()
 	if err != nil {
