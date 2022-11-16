@@ -16,6 +16,7 @@ const (
 
 type Control interface {
 	Login(host, user, passwd string, width, height int) error
+	Connect() error
 	KeyUp(sc int, name string)
 	KeyDown(sc int, name string)
 	MouseMove(x, y int)

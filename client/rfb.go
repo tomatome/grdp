@@ -13,6 +13,10 @@ type VncClient struct {
 	vnc *rfb.RFB
 }
 
+func (c *VncClient) Connect() error {
+	return nil
+}
+
 func newVncClient(s *Setting) *VncClient {
 	return &VncClient{}
 }

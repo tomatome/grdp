@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tomatome/grdp/core"
+	"github.com/tomatome/grdp/glog"
 	"github.com/tomatome/grdp/plugin"
 	"github.com/tomatome/grdp/protocol/nla"
 	"github.com/tomatome/grdp/protocol/pdu"
@@ -16,22 +17,61 @@ import (
 	"github.com/tomatome/grdp/protocol/x224"
 )
 
+const (
+	RdpProtocolRDP      = "rdp"
+	RdpProtocolSSL      = "ssl"
+	RdpProtocolHybrid   = "hybrid"
+	RdpProtocolHybridEx = "hybrid_ex"
+)
+
 type RdpClient struct {
-	tpkt     *tpkt.TPKT
-	x224     *x224.X224
-	mcs      *t125.MCSClient
-	sec      *sec.Client
-	pdu      *pdu.Client
-	channels *plugin.Channels
+	// connection
+	host     string
+	port     string
+	domain   string
+	username string
+	password string
+
+	// window
+	windowHeight uint16
+	windowWidth  uint16
+
+	// protocols
+	tpkt              *tpkt.TPKT
+	x224              *x224.X224
+	mcs               *t125.MCSClient
+	sec               *sec.Client
+	pdu               *pdu.Client
+	channels          *plugin.Channels
+	requestedProtocol string
 }
 
-func newRdpClient(s *Setting) *RdpClient {
-	return &RdpClient{}
+func (c *RdpClient) setRequestedProtocol() {
+	switch c.requestedProtocol {
+	case RdpProtocolRDP:
+		c.x224.SetRequestedProtocol(x224.PROTOCOL_RDP)
+	case RdpProtocolSSL:
+		c.x224.SetRequestedProtocol(x224.PROTOCOL_SSL)
+	case RdpProtocolHybrid:
+		c.x224.SetRequestedProtocol(x224.PROTOCOL_HYBRID)
+	case RdpProtocolHybridEx:
+		c.x224.SetRequestedProtocol(x224.PROTOCOL_HYBRID_EX)
+	}
+}
+
+func (c *RdpClient) WithWindowSize(height, width uint16) {
+	c.windowWidth = width
+	c.windowHeight = height
+}
+
+func (c *RdpClient) WithRequestedProtocol(protocol string) {
+	c.requestedProtocol = protocol
 }
 
 func bitmapDecompress(bitmap *pdu.BitmapData) []byte {
 	return core.Decompress(bitmap.BitmapDataStream, int(bitmap.Width), int(bitmap.Height), Bpp(bitmap.BitsPerPixel))
 }
+
 func split(user string) (domain string, uname string) {
 	if strings.Index(user, "\\") != -1 {
 		t := strings.Split(user, "\\")
@@ -46,12 +86,49 @@ func split(user string) (domain string, uname string) {
 	}
 	return
 }
+
+func (c *RdpClient) Connect() error {
+	addr := net.JoinHostPort(c.host, c.port)
+	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	if err != nil {
+		return err
+	}
+
+	domain := c.domain
+	username := c.username
+	if c.domain == "" {
+		domain, username = split(username)
+	}
+
+	glog.Infof("Connect to ", addr)
+
+	c.tpkt = tpkt.New(core.NewSocketLayer(conn), nla.NewNTLMv2(domain, username, c.password))
+	c.x224 = x224.New(c.tpkt)
+	c.mcs = t125.NewMCSClient(c.x224)
+	c.sec = sec.NewClient(c.mcs)
+	c.pdu = pdu.NewClient(c.sec)
+	c.channels = plugin.NewChannels(c.sec)
+
+	c.mcs.SetClientCoreData(c.windowWidth, c.windowHeight)
+
+	c.sec.SetUser(username)
+	c.sec.SetPwd(c.password)
+	c.sec.SetDomain(domain)
+
+	c.tpkt.SetFastPathListener(c.sec)
+	c.sec.SetFastPathListener(c.pdu)
+	c.sec.SetChannelSender(c.mcs)
+	c.channels.SetChannelSender(c.sec)
+
+	c.setRequestedProtocol()
+	return c.x224.Connect()
+}
+
 func (c *RdpClient) Login(host, user, pwd string, width, height int) error {
 	conn, err := net.DialTimeout("tcp", host, 3*time.Second)
 	if err != nil {
 		return fmt.Errorf("[dial err] %v", err)
 	}
-
 	domain, user := split(user)
 	c.tpkt = tpkt.New(core.NewSocketLayer(conn), nla.NewNTLMv2(domain, user, pwd))
 	c.x224 = x224.New(c.tpkt)
@@ -80,15 +157,18 @@ func (c *RdpClient) Login(host, user, pwd string, width, height int) error {
 	}
 	return nil
 }
+
 func (c *RdpClient) On(event string, f interface{}) {
 	c.pdu.On(event, f)
 }
+
 func (c *RdpClient) KeyUp(sc int, name string) {
 	p := &pdu.ScancodeKeyEvent{}
 	p.KeyCode = uint16(sc)
 	p.KeyboardFlags |= pdu.KBDFLAGS_RELEASE
 	c.pdu.SendInputEvents(pdu.INPUT_EVENT_SCANCODE, []pdu.InputEventsInterface{p})
 }
+
 func (c *RdpClient) KeyDown(sc int, name string) {
 	p := &pdu.ScancodeKeyEvent{}
 	p.KeyCode = uint16(sc)
@@ -129,6 +209,7 @@ func (c *RdpClient) MouseUp(button int, x, y int) {
 	p.YPos = uint16(y)
 	c.pdu.SendInputEvents(pdu.INPUT_EVENT_MOUSE, []pdu.InputEventsInterface{p})
 }
+
 func (c *RdpClient) MouseDown(button int, x, y int) {
 	p := &pdu.PointerEvent{}
 
@@ -149,8 +230,13 @@ func (c *RdpClient) MouseDown(button int, x, y int) {
 	p.YPos = uint16(y)
 	c.pdu.SendInputEvents(pdu.INPUT_EVENT_MOUSE, []pdu.InputEventsInterface{p})
 }
+
 func (c *RdpClient) Close() {
 	if c != nil && c.tpkt != nil {
 		c.tpkt.Close()
 	}
+}
+
+func newRdpClient(s *Setting) *RdpClient {
+	return &RdpClient{}
 }
