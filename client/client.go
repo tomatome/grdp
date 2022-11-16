@@ -1,4 +1,3 @@
-// client.go
 package client
 
 import (
@@ -8,12 +7,6 @@ import (
 	"github.com/tomatome/grdp/glog"
 	"github.com/tomatome/grdp/protocol/pdu"
 	"github.com/tomatome/grdp/protocol/rfb"
-)
-
-const (
-	CLIP_OFF = 0
-	CLIP_IN  = 0x1
-	CLIP_OUT = 0x2
 )
 
 const (
@@ -46,6 +39,7 @@ func init() {
 	logger := log.New(os.Stdout, "", 0)
 	glog.SetLogger(logger)
 }
+
 func NewClient(host, user, passwd string, t int, s *Setting) *Client {
 	if s == nil {
 		s = NewSetting()
@@ -100,9 +94,11 @@ func (c *Client) OnClose(f func()) {
 func (c *Client) OnSuccess(f func()) {
 	c.ctl.On("success", f)
 }
+
 func (c *Client) OnReady(f func()) {
 	c.ctl.On("ready", f)
 }
+
 func (c *Client) OnBitmap(f func([]Bitmap)) {
 	f1 := func(data interface{}) {
 		bs := make([]Bitmap, 0, 50)
@@ -184,5 +180,10 @@ func (s *Setting) SetLogLevel() {
 	glog.SetLevel(s.LogLevel)
 }
 
-func (s *Setting) SetRequestedProtocol(p uint32) {}
-func (s *Setting) SetClipboard(c int)            {}
+func (s *Setting) SetRequestedProtocol(p uint32) {
+
+}
+
+func (s *Setting) SetClipboard(c int) {
+
+}
