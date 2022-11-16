@@ -1,4 +1,3 @@
-// client_test.go
 package client
 
 import (
