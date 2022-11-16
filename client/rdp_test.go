@@ -37,7 +37,7 @@ func getPassword() string {
 
 func TestClientLogin(t *testing.T) {
 	c := NewRdpClient(getHost(), getPort(), getDomain(), getUsername(), getPassword())
-	err := c.Login(getHost(), getUsername(), getPassword(), 800, 600)
+	err := c.Login(getHost()+":"+getPort(), getUsername(), getPassword(), 800, 600)
 	if err != nil {
 		fmt.Println("Login:", err)
 	}
