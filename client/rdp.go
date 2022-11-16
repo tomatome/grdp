@@ -108,7 +108,7 @@ func (c *RdpClient) Connect() error {
 		domain, username = split(username)
 	}
 
-	glog.Infof("Connect to ", addr)
+	glog.Infof("Connect to %v", addr)
 
 	c.tpkt = tpkt.New(core.NewSocketLayer(conn), nla.NewNTLMv2(domain, username, c.password))
 	c.x224 = x224.New(c.tpkt)
