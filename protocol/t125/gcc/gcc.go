@@ -399,7 +399,7 @@ type CertBlob struct {
 type X509CertificateChain struct {
 	NumCertBlobs  uint32     `struc:"little,sizeof=CertBlobArray"`
 	CertBlobArray []CertBlob `struc:"little"`
-	Padding       []byte     `struc:"little"`
+	Padding       []byte     `struc:"[12]byte"`
 }
 
 func (p *X509CertificateChain) GetPublicKey() (uint32, []byte) {
