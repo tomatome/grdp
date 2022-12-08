@@ -11,6 +11,7 @@ import (
 	"github.com/tomatome/grdp/glog"
 
 	"github.com/lunixbochs/struc"
+
 	"github.com/tomatome/grdp/core"
 	"github.com/tomatome/grdp/protocol/t125/per"
 )
@@ -597,7 +598,7 @@ func ReadConferenceCreateResponse(data []byte) []interface{} {
 			err := d.Unpack(r)
 			if err != nil {
 				glog.Error("Unpack:", err)
-				return ret
+				continue
 			}
 			ret = append(ret, d)
 		}

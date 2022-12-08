@@ -405,6 +405,11 @@ func NewRFB(t core.Transport) *RFB {
 	return fb
 }
 
+func (fb *RFB) Connect() error {
+	// TODO: implement
+	return nil
+}
+
 func (fb *RFB) recvProtocolVersion(version string) {
 	if version != RFB003003 || version != RFB003007 || version != RFB003008 {
 		version = RFB003008

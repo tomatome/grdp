@@ -13,8 +13,8 @@ type VncClient struct {
 	vnc *rfb.RFB
 }
 
-func newVncClient(s *Setting) *VncClient {
-	return &VncClient{}
+func (c *VncClient) Connect() error {
+	return nil
 }
 
 func (c *VncClient) Login(host, user, pwd string, width, height int) error {
@@ -100,4 +100,19 @@ func (c *VncClient) Close() {
 	if c.vnc != nil {
 		c.vnc.Close()
 	}
+}
+
+func (c *VncClient) OnBitmap(handler func([]Bitmap)) {
+	f1 := func(data interface{}) {
+		bs := make([]Bitmap, 0, 50)
+		br := data.(*rfb.BitRect)
+		for _, v := range br.Rects {
+			b := Bitmap{int(v.Rect.X), int(v.Rect.Y), int(v.Rect.X + v.Rect.Width), int(v.Rect.Y + v.Rect.Height),
+				int(v.Rect.Width), int(v.Rect.Height),
+				Bpp(uint16(br.Pf.BitsPerPixel)), false, v.Data}
+			bs = append(bs, b)
+		}
+		handler(bs)
+	}
+	c.On("update", f1)
 }
