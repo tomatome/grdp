@@ -8,9 +8,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/tomatome/grdp/plugin/cliprdr"
-
 	"github.com/tomatome/grdp/plugin"
+	"github.com/tomatome/grdp/plugin/cliprdr"
 
 	"github.com/tomatome/grdp/core"
 	"github.com/tomatome/grdp/glog"
@@ -80,23 +79,19 @@ func uiRdp(info *Info) (error, *RdpClient) {
 		glog.Info("on success")
 	}).On("ready", func() {
 		glog.Info("on ready")
-
 	}).On("bitmap", func(rectangles []pdu.BitmapData) {
-		glog.Info("on update Bitmap:", len(rectangles))
+		glog.Info("Update Bitmap:", len(rectangles))
 		bs := make([]Bitmap, 0, 50)
 		for _, v := range rectangles {
 			IsCompress := v.IsCompress()
 			data := v.BitmapDataStream
-			//glog.Info("data:", data)
 			if IsCompress {
 				data = BitmapDecompress(&v)
 				IsCompress = false
 			}
 
-			//glog.Info(IsCompress, v.BitsPerPixel)
 			b := Bitmap{int(v.DestLeft), int(v.DestTop), int(v.DestRight), int(v.DestBottom),
 				int(v.Width), int(v.Height), Bpp(v.BitsPerPixel), IsCompress, data}
-			//glog.Infof("b:%+v, %d==%d", b.DestLeft, len(b.Data), b.Width*b.Height*4)
 			bs = append(bs, b)
 		}
 		ui_paint_bitmap(bs)
@@ -112,7 +107,6 @@ func (g *RdpClient) Login() error {
 	if err != nil {
 		return fmt.Errorf("[dial err] %v", err)
 	}
-	//defer conn.Close()
 
 	g.tpkt = tpkt.New(core.NewSocketLayer(conn), nla.NewNTLMv2(domain, user, pwd))
 	g.x224 = x224.New(g.tpkt)
@@ -121,7 +115,18 @@ func (g *RdpClient) Login() error {
 	g.pdu = pdu.NewClient(g.sec)
 	g.channels = plugin.NewChannels(g.sec)
 
-	g.mcs.SetClientCoreData(uint16(g.Width), uint16(g.Height))
+	g.mcs.SetClientDesktop(uint16(g.Width), uint16(g.Height))
+	//clipboard
+	//g.channels.Register(cliprdr.NewCliprdrClient())
+	//g.mcs.SetClientCliprdr()
+
+	//remote app
+	//g.channels.Register(rail.NewClient())
+	//g.mcs.SetClientRemoteProgram()
+	//g.sec.SetAlternateShell("")
+
+	//dvc
+	//g.channels.Register(drdynvc.NewDvcClient())
 
 	g.sec.SetUser(user)
 	g.sec.SetPwd(pwd)
@@ -144,7 +149,7 @@ func (g *RdpClient) Login() error {
 }
 
 func (g *RdpClient) KeyUp(sc int, name string) {
-	glog.Debug("KeyUp:", sc, "name:", name)
+	glog.Debugf("KeyUp: 0x%x, name: %s", sc, name)
 
 	p := &pdu.ScancodeKeyEvent{}
 	p.KeyCode = uint16(sc)
@@ -152,7 +157,7 @@ func (g *RdpClient) KeyUp(sc int, name string) {
 	g.pdu.SendInputEvents(pdu.INPUT_EVENT_SCANCODE, []pdu.InputEventsInterface{p})
 }
 func (g *RdpClient) KeyDown(sc int, name string) {
-	glog.Debug("KeyDown:", sc, "name:", name)
+	glog.Debugf("KeyDown: 0x%x, name: %s", sc, name)
 
 	p := &pdu.ScancodeKeyEvent{}
 	p.KeyCode = uint16(sc)

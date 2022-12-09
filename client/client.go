@@ -146,24 +146,8 @@ type Bitmap struct {
 	Data         []byte `json:"data"`
 }
 
-func Bpp(bp uint16) (pixel int) {
-	switch bp {
-	case 15:
-		pixel = 1
-
-	case 16:
-		pixel = 2
-
-	case 24:
-		pixel = 3
-
-	case 32:
-		pixel = 4
-
-	default:
-		glog.Error("invalid bitmap data format")
-	}
-	return
+func Bpp(bp uint16) int {
+	return int(bp / 8)
 }
 
 type Setting struct {

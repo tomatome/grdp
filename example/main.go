@@ -32,7 +32,7 @@ func main() {
 		socketIO()
 	} else {
 		//client example
-		StartUI(1024, 768)
+		StartUI(1520, 1080)
 	}
 }
 

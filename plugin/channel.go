@@ -171,8 +171,12 @@ const (
 	RDPDR_SVC_CHANNEL_NAME   = "rdpdr"   //设备重定向(打印机，磁盘，端口，智能卡等)
 	RDPSND_SVC_CHANNEL_NAME  = "rdpsnd"  //音频输出
 	RAIL_SVC_CHANNEL_NAME    = "rail"    //远程应用
-	ENCOMSP_SVC_CHANNEL_NAME = "encomsp" //多方虚拟通道
+	DRDYNVC_SVC_CHANNEL_NAME = "drdynvc" //动态虚拟通道
 	REMDESK_SVC_CHANNEL_NAME = "remdesk" //远程协助
+)
+
+const (
+	RDPGFX_DVC_CHANNEL_NAME = "Microsoft::Windows::RDS::Graphics" //图形扩展
 )
 
 var StaticVirtualChannels = map[string]int{

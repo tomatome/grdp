@@ -9,7 +9,6 @@ import (
 	//"crypto/tls"
 	"errors"
 	"net"
-
 	"github.com/icodeface/tls"
 )
 

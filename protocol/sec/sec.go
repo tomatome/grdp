@@ -170,8 +170,9 @@ type RDPInfo struct {
 
 func NewRDPInfo() *RDPInfo {
 	info := &RDPInfo{
-		//Flag: INFO_MOUSE | INFO_UNICODE | INFO_LOGONNOTIFY | INFO_LOGONERRORS | INFO_DISABLECTRLALTDEL | INFO_ENABLEWINDOWSKEY | INFO_FORCE_ENCRYPTED_CS_PDU,
-		Flag:           INFO_MOUSE | INFO_UNICODE | INFO_LOGONNOTIFY | INFO_LOGONERRORS | INFO_DISABLECTRLALTDEL | INFO_ENABLEWINDOWSKEY | INFO_AUTOLOGON,
+		Flag: INFO_MOUSE | INFO_UNICODE | INFO_LOGONNOTIFY |
+			INFO_LOGONERRORS | INFO_DISABLECTRLALTDEL | INFO_ENABLEWINDOWSKEY |
+			INFO_FORCE_ENCRYPTED_CS_PDU | INFO_AUTOLOGON,
 		Domain:         []byte{0, 0},
 		UserName:       []byte{0, 0},
 		Password:       []byte{0, 0},
@@ -278,7 +279,7 @@ func (s *SEC) Write(b []byte) (n int, err error) {
 	if !s.enableEncryption {
 		return s.transport.Write(b)
 	}
-
+	glog.Info("b:", hex.EncodeToString(b))
 	data := s.encrytData(b)
 	return s.transport.Write(data)
 }
@@ -288,7 +289,7 @@ func (s *SEC) Close() error {
 }
 
 func (s *SEC) sendFlagged(flag uint16, data []byte) (n int, err error) {
-	glog.Debug("sendFlagged:", hex.EncodeToString(data))
+	glog.Trace("sendFlagged:", hex.EncodeToString(data))
 	b := s.encryt(flag, data)
 	return s.transport.Write(b)
 }
@@ -438,6 +439,7 @@ func (c *Client) SetAlternateShell(shell string) {
 	}
 	core.WriteUInt16LE(0, buff)
 	c.info.AlternateShell = buff.Bytes()
+	c.info.Flag |= INFO_RAIL
 }
 
 func (c *Client) SetUser(user string) {
@@ -476,10 +478,10 @@ func (c *Client) connect(clientData []interface{}, serverData []interface{}, use
 	c.serverData = serverData
 	c.userId = userId
 	for _, channel := range channels {
-		glog.Debug("channel:", channel.Name, channel.ID)
+		glog.Infof("channel: %s <%d>:", channel.Name, channel.ID)
 		if channel.Name == t125.GLOBAL_CHANNEL_NAME {
 			c.channelId = channel.ID
-			break
+			//break
 		}
 	}
 	c.enableEncryption = c.ClientCoreData().ServerSelectedProtocol == 0
@@ -853,8 +855,8 @@ func (c *Client) sendClientChallengeResponse(data []byte) {
 }
 
 func (c *Client) recvData(channel string, s []byte) {
-	glog.Debug("sec recvData", hex.EncodeToString(s))
-	glog.Debug(channel, len(s), ":", s)
+	glog.Trace("sec recvData", hex.EncodeToString(s))
+	glog.Debugf("channel<%s> data len: %d", channel, len(s))
 	data := c.decrytData(s)
 	if channel != t125.GLOBAL_CHANNEL_NAME {
 		c.Emit("channel", channel, data)

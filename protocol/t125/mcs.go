@@ -8,6 +8,11 @@ import (
 	"io"
 	"reflect"
 
+	"github.com/tomatome/grdp/plugin/cliprdr"
+	"github.com/tomatome/grdp/plugin/rail"
+
+	"github.com/tomatome/grdp/plugin/drdynvc"
+
 	"github.com/tomatome/grdp/core"
 	"github.com/tomatome/grdp/emission"
 	"github.com/tomatome/grdp/glog"
@@ -272,16 +277,32 @@ func NewMCSClient(t core.Transport) *MCSClient {
 	return c
 }
 
-func (c *MCSClient) SetClientCoreData(width, height uint16) {
+func (c *MCSClient) SetClientDesktop(width, height uint16) {
 	c.clientCoreData.DesktopWidth = width
 	c.clientCoreData.DesktopHeight = height
+}
+
+func (c *MCSClient) SetClientDynvcProtocol() {
+	c.clientCoreData.EarlyCapabilityFlags = gcc.RNS_UD_CS_SUPPORT_DYNVC_GFX_PROTOCOL
+	c.clientNetworkData.AddVirtualChannel(drdynvc.ChannelName, drdynvc.ChannelOption)
+}
+
+func (c *MCSClient) SetClientRemoteProgram() {
+	c.clientNetworkData.AddVirtualChannel(rail.ChannelName, rail.ChannelOption)
+}
+
+func (c *MCSClient) SetClientCliprdr() {
+	c.clientNetworkData.AddVirtualChannel(cliprdr.ChannelName, cliprdr.ChannelOption)
 }
 
 func (c *MCSClient) connect(selectedProtocol uint32) {
 	glog.Debug("mcs client on connect", selectedProtocol)
 	c.clientCoreData.ServerSelectedProtocol = selectedProtocol
 
-	// sendConnectInitial
+	glog.Debugf("clientCoreData:%+v", c.clientCoreData)
+	glog.Debugf("clientNetworkData:%+v", c.clientNetworkData)
+	glog.Debugf("clientSecurityData:%+v", c.clientSecurityData)
+	// sendConnectclientCoreDataInitial
 	userDataBuff := bytes.Buffer{}
 	userDataBuff.Write(c.clientCoreData.Pack())
 	userDataBuff.Write(c.clientNetworkData.Pack())
@@ -305,7 +326,7 @@ func (c *MCSClient) connect(selectedProtocol uint32) {
 }
 
 func (c *MCSClient) recvConnectResponse(s []byte) {
-	glog.Debug("mcs recvConnectResponse", hex.EncodeToString(s))
+	glog.Trace("mcs recvConnectResponse", hex.EncodeToString(s))
 	cResp, err := ReadConnectResponse(bytes.NewReader(s))
 	if err != nil {
 		c.Emit("error", errors.New(fmt.Sprintf("ReadConnectResponse %v", err)))
@@ -433,7 +454,7 @@ func (c *MCSClient) sendChannelJoinRequest(channelId uint16) {
 }
 
 func (c *MCSClient) recvData(s []byte) {
-	glog.Debug("msc on data recvData:", hex.EncodeToString(s))
+	glog.Trace("msc on data recvData:", hex.EncodeToString(s))
 
 	r := bytes.NewReader(s)
 	option, err := core.ReadUInt8(r)
@@ -476,7 +497,7 @@ func (c *MCSClient) recvData(s []byte) {
 		c.Emit("error", errors.New(fmt.Sprintf("mcs recvData get data error %v", err)))
 		return
 	}
-	glog.Debugf("mcs emit channel<%s>:%v", channelName, left)
+	glog.Debugf("mcs emit channel<%s>", channelName)
 	c.Emit("sec", channelName, left)
 }
 
@@ -531,7 +552,7 @@ func (c *MCSClient) Pack(data []byte, channelId uint16) []byte {
 	core.WriteUInt8(0x70, buff)
 	per.WriteLength(len(data), buff)
 	core.WriteBytes(data, buff)
-	glog.Debug("MCSClient write", channelId, ":", hex.EncodeToString(buff.Bytes()))
+	glog.Trace("MCSClient write", channelId, ":", hex.EncodeToString(buff.Bytes()))
 	return buff.Bytes()
 }
 

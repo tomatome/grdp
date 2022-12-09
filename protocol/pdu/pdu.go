@@ -69,16 +69,30 @@ func NewPDULayer(t core.Transport) *PDULayer {
 				MaximumOrderLevel:       1,
 				OrderFlags:              NEGOTIATEORDERSUPPORT,
 				DesktopSaveSize:         480 * 480,
+				TextANSICodePage:        0x4e4,
 			},
-			CAPSTYPE_BITMAPCACHE:           &BitmapCacheCapability{},
-			CAPSTYPE_POINTER:               &PointerCapability{ColorPointerCacheSize: 20},
-			CAPSTYPE_INPUT:                 &InputCapability{},
-			CAPSTYPE_BRUSH:                 &BrushCapability{},
-			CAPSTYPE_GLYPHCACHE:            &GlyphCapability{},
-			CAPSTYPE_OFFSCREENCACHE:        &OffscreenBitmapCacheCapability{},
-			CAPSTYPE_VIRTUALCHANNEL:        &VirtualChannelCapability{},
-			CAPSTYPE_SOUND:                 &SoundCapability{},
-			CAPSETTYPE_MULTIFRAGMENTUPDATE: &MultiFragmentUpdate{},
+			CAPSTYPE_CONTROL:         &ControlCapability{0, 0, 2, 2},
+			CAPSTYPE_ACTIVATION:      &WindowActivationCapability{},
+			CAPSTYPE_POINTER:         &PointerCapability{1, 20, 20},
+			CAPSTYPE_SHARE:           &ShareCapability{},
+			CAPSTYPE_COLORCACHE:      &ColorCacheCapability{6, 0},
+			CAPSTYPE_SOUND:           &SoundCapability{0x0001, 0},
+			CAPSTYPE_INPUT:           &InputCapability{},
+			CAPSTYPE_FONT:            &FontCapability{0x0001, 0},
+			CAPSTYPE_BRUSH:           &BrushCapability{BRUSH_COLOR_8x8},
+			CAPSTYPE_GLYPHCACHE:      &GlyphCapability{},
+			CAPSETTYPE_BITMAP_CODECS: &BitmapCodecsCapability{},
+			CAPSTYPE_BITMAPCACHE_REV2: &BitmapCache2Capability{
+				BitmapCachePersist: 2,
+				CachesNum:          5,
+				BmpC0Cells:         0x258,
+				BmpC1Cells:         0x258,
+				BmpC2Cells:         0x800,
+				BmpC3Cells:         0x1000,
+				BmpC4Cells:         0x800,
+			},
+			CAPSTYPE_VIRTUALCHANNEL:        &VirtualChannelCapability{0, 1600},
+			CAPSETTYPE_MULTIFRAGMENTUPDATE: &MultiFragmentUpdate{65535},
 			CAPSTYPE_RAIL: &RemoteProgramsCapability{
 				RailSupportLevel: RAIL_LEVEL_SUPPORTED |
 					RAIL_LEVEL_SHELL_INTEGRATION_SUPPORTED |
@@ -89,6 +103,11 @@ func NewPDULayer(t core.Transport) *PDULayer {
 					RAIL_LEVEL_HANDSHAKE_EX_SUPPORTED |
 					RAIL_LEVEL_DOCKED_LANGBAR_SUPPORTED,
 			},
+			CAPSETTYPE_LARGE_POINTER: &LargePointerCapability{1},
+			CAPSETTYPE_SURFACE_COMMANDS: &SurfaceCommandsCapability{
+				CmdFlags: SURFCMDS_SET_SURFACE_BITS | SURFCMDS_STREAM_SURFACE_BITS | SURFCMDS_FRAME_MARKER,
+			},
+			CAPSSETTYPE_FRAME_ACKNOWLEDGE: &FrameAcknowledgeCapability{2},
 		},
 	}
 
@@ -117,11 +136,13 @@ func (p *PDULayer) SetFastPathSender(f core.FastPathSender) {
 type Client struct {
 	*PDULayer
 	clientCoreData *gcc.ClientCoreData
+	buff           *bytes.Buffer
 }
 
 func NewClient(t core.Transport) *Client {
 	c := &Client{
 		PDULayer: NewPDULayer(t),
+		buff:     &bytes.Buffer{},
 	}
 	c.transport.Once("connect", c.connect)
 	return c
@@ -136,7 +157,7 @@ func (c *Client) connect(data *gcc.ClientCoreData, userId uint16, channelId uint
 }
 
 func (c *Client) recvDemandActivePDU(s []byte) {
-	glog.Debug("PDU recvDemandActivePDU", hex.EncodeToString(s))
+	glog.Trace("PDU recvDemandActivePDU", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
 	pdu, err := readPDU(r)
 	if err != nil {
@@ -151,6 +172,7 @@ func (c *Client) recvDemandActivePDU(s []byte) {
 	c.sharedId = pdu.Message.(*DemandActivePDU).SharedId
 	c.demandActivePDU = pdu.Message.(*DemandActivePDU)
 	for _, caps := range pdu.Message.(*DemandActivePDU).CapabilitySets {
+		glog.Debugf("serverCapabilities<%s>: %+v", caps.Type(), caps)
 		c.serverCapabilities[caps.Type()] = caps
 	}
 
@@ -163,21 +185,40 @@ func (c *Client) sendConfirmActivePDU() {
 	glog.Debug("PDU start sendConfirmActivePDU")
 
 	pdu := NewConfirmActivePDU()
-
 	generalCapa := c.clientCapabilities[CAPSTYPE_GENERAL].(*GeneralCapability)
 	generalCapa.OSMajorType = OSMAJORTYPE_WINDOWS
 	generalCapa.OSMinorType = OSMINORTYPE_WINDOWS_NT
-	generalCapa.ExtraFlags = LONG_CREDENTIALS_SUPPORTED | NO_BITMAP_COMPRESSION_HDR | ENC_SALTED_CHECKSUM
-	//if not self._fastPathSender is None:
-	generalCapa.ExtraFlags |= FASTPATH_OUTPUT_SUPPORTED
+	generalCapa.ExtraFlags = LONG_CREDENTIALS_SUPPORTED | NO_BITMAP_COMPRESSION_HDR |
+		FASTPATH_OUTPUT_SUPPORTED | AUTORECONNECT_SUPPORTED
+	generalCapa.RefreshRectSupport = 0
+	generalCapa.SuppressOutputSupport = 0
 
 	bitmapCapa := c.clientCapabilities[CAPSTYPE_BITMAP].(*BitmapCapability)
 	bitmapCapa.PreferredBitsPerPixel = c.clientCoreData.HighColorDepth
 	bitmapCapa.DesktopWidth = c.clientCoreData.DesktopWidth
 	bitmapCapa.DesktopHeight = c.clientCoreData.DesktopHeight
+	bitmapCapa.DesktopResizeFlag = 0x0001
 
 	orderCapa := c.clientCapabilities[CAPSTYPE_ORDER].(*OrderCapability)
-	orderCapa.OrderFlags |= ZEROBOUNDSDELTASSUPPORT
+	orderCapa.OrderFlags = NEGOTIATEORDERSUPPORT | ZEROBOUNDSDELTASSUPPORT |
+		COLORINDEXSUPPORT | ORDERFLAGS_EXTRA_FLAGS
+	orderCapa.OrderSupportExFlags |= ORDERFLAGS_EX_ALTSEC_FRAME_MARKER_SUPPORT
+	orderCapa.OrderSupport[TS_NEG_DSTBLT_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_PATBLT_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_SCRBLT_INDEX] = 1
+	/*orderCapa.OrderSupport[TS_NEG_LINETO_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_MULTIOPAQUERECT_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_POLYLINE_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_GLYPH_INDEX_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_MEMBLT_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_MEM3BLT_INDEX] = 1
+	//orderCapa.OrderSupport[TS_NEG_DRAWNINEGRID_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_SAVEBITMAP_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_POLYGON_SC_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_POLYGON_CB_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_ELLIPSE_SC_INDEX] = 1
+	orderCapa.OrderSupport[TS_NEG_ELLIPSE_CB_INDEX] = 1*/
+	orderCapa.OrderSupport[TS_NEG_FAST_GLYPH_INDEX] = 1
 
 	inputCapa := c.clientCapabilities[CAPSTYPE_INPUT].(*InputCapability)
 	inputCapa.Flags = INPUT_FLAG_SCANCODES | INPUT_FLAG_MOUSEX | INPUT_FLAG_UNICODE
@@ -187,13 +228,26 @@ func (c *Client) sendConfirmActivePDU() {
 	inputCapa.KeyboardFunctionKey = c.clientCoreData.KeyboardFnKeys
 	inputCapa.ImeFileName = c.clientCoreData.ImeFileName
 
+	glyphCapa := c.clientCapabilities[CAPSTYPE_GLYPHCACHE].(*GlyphCapability)
+	/*glyphCapa.GlyphCache[0] = cacheEntry{254, 4}
+	glyphCapa.GlyphCache[1] = cacheEntry{254, 4}
+	glyphCapa.GlyphCache[2] = cacheEntry{254, 8}
+	glyphCapa.GlyphCache[3] = cacheEntry{254, 8}
+	glyphCapa.GlyphCache[4] = cacheEntry{254, 16}
+	glyphCapa.GlyphCache[5] = cacheEntry{254, 32}
+	glyphCapa.GlyphCache[6] = cacheEntry{254, 64}
+	glyphCapa.GlyphCache[7] = cacheEntry{254, 128}
+	glyphCapa.GlyphCache[8] = cacheEntry{254, 256}
+	glyphCapa.GlyphCache[9] = cacheEntry{64, 2048}
+	glyphCapa.FragCache = 0x01000100*/
+	glyphCapa.SupportLevel = GLYPH_SUPPORT_NONE
+
 	pdu.SharedId = c.sharedId
-	pdu.NumberCapabilities = c.demandActivePDU.NumberCapabilities
 	for _, v := range c.clientCapabilities {
-		glog.Debugf("clientCapabilities: 0x%04x", v.Type())
+		glog.Debugf("clientCapabilities<%s>: %+v", v.Type(), v)
 		pdu.CapabilitySets = append(pdu.CapabilitySets, v)
 	}
-
+	pdu.NumberCapabilities = uint16(len(pdu.CapabilitySets))
 	pdu.LengthSourceDescriptor = c.demandActivePDU.LengthSourceDescriptor
 	pdu.SourceDescriptor = c.demandActivePDU.SourceDescriptor
 	pdu.LengthCombinedCapabilities = c.demandActivePDU.LengthCombinedCapabilities
@@ -306,7 +360,7 @@ func (c *Client) recvServerFontMapPDU(s []byte) {
 }
 
 func (c *Client) recvPDU(s []byte) {
-	glog.Debug("PDU recvPDU", hex.EncodeToString(s))
+	glog.Trace("PDU recvPDU", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
 	if r.Len() > 0 {
 		p, err := readPDU(r)
@@ -321,18 +375,57 @@ func (c *Client) recvPDU(s []byte) {
 }
 
 func (c *Client) RecvFastPath(secFlag byte, s []byte) {
-	//glog.Debug("PDU RecvFastPath", hex.EncodeToString(s))
-	glog.Debug("PDU RecvFastPath", secFlag&0x2 != 0)
+	glog.Trace("PDU RecvFastPath", hex.EncodeToString(s))
 	r := bytes.NewReader(s)
 	for r.Len() > 0 {
-		p, err := readFastPathUpdatePDU(r)
+		updateHeader, err := core.ReadUInt8(r)
 		if err != nil {
-			glog.Debug("readFastPathUpdatePDU:", err)
-			//continue
 			return
 		}
-		if p.UpdateHeader == FASTPATH_UPDATETYPE_BITMAP {
+		updateCode := updateHeader & 0x0f
+		fragmentation := updateHeader & 0x30
+		compression := updateHeader & 0xC0
+
+		var compressionFlags uint8 = 0
+		if compression == FASTPATH_OUTPUT_COMPRESSION_USED {
+			compressionFlags, err = core.ReadUInt8(r)
+		}
+
+		size, err := core.ReadUint16LE(r)
+
+		if err != nil {
+			return
+		}
+		glog.Trace("Code:", FastPathUpdateType(updateCode),
+			"compressionFlags:", compressionFlags,
+			"fragmentation:", fragmentation,
+			"size:", size, "len:", r.Len())
+		if compressionFlags&RDP_MPPC_COMPRESSED != 0 {
+			glog.Info("RDP_MPPC_COMPRESSED")
+		}
+		if fragmentation != FASTPATH_FRAGMENT_SINGLE {
+			if fragmentation == FASTPATH_FRAGMENT_FIRST {
+				c.buff.Reset()
+			}
+			b, _ := core.ReadBytes(r.Len(), r)
+			c.buff.Write(b)
+			if fragmentation != FASTPATH_FRAGMENT_LAST {
+				return
+			}
+			r = bytes.NewReader(c.buff.Bytes())
+		}
+		p, err := readFastPathUpdatePDU(r, updateCode)
+		if err != nil || p == nil || p.Data == nil {
+			glog.Debug("readFastPathUpdatePDU:", err)
+			return
+		}
+
+		if updateCode == FASTPATH_UPDATETYPE_BITMAP {
 			c.Emit("bitmap", p.Data.(*FastPathBitmapUpdateDataPDU).Rectangles)
+		} else if updateCode == FASTPATH_UPDATETYPE_COLOR {
+			c.Emit("color", p.Data.(*FastPathColorPdu))
+		} else if updateCode == FASTPATH_UPDATETYPE_ORDERS {
+			c.Emit("orders", p.Data.(*FastPathOrdersPDU).OrderPdus)
 		}
 	}
 }

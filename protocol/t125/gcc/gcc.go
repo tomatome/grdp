@@ -6,8 +6,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/tomatome/grdp/plugin"
-
 	"github.com/tomatome/grdp/glog"
 
 	"github.com/lunixbochs/struc"
@@ -276,11 +274,9 @@ type ClientNetworkData struct {
 }
 
 func NewClientNetworkData() *ClientNetworkData {
-	n := &ClientNetworkData{}
-	n.ChannelCount = 3
-	n.ChannelDefArray = make([]ChannelDef, 0, n.ChannelCount)
+	n := &ClientNetworkData{ChannelDefArray: make([]ChannelDef, 0, 100)}
 
-	var d1 ChannelDef
+	/*var d1 ChannelDef
 	d1.Name = plugin.RDPDR_SVC_CHANNEL_NAME
 	d1.Options = uint32(CHANNEL_OPTION_INITIALIZED | CHANNEL_OPTION_ENCRYPT_RDP |
 		CHANNEL_OPTION_COMPRESS_RDP)
@@ -290,24 +286,27 @@ func NewClientNetworkData() *ClientNetworkData {
 	d2.Name = plugin.RDPSND_SVC_CHANNEL_NAME
 	d2.Options = uint32(CHANNEL_OPTION_INITIALIZED | CHANNEL_OPTION_ENCRYPT_RDP |
 		CHANNEL_OPTION_COMPRESS_RDP | CHANNEL_OPTION_SHOW_PROTOCOL)
-	n.ChannelDefArray = append(n.ChannelDefArray, d2)
-	var d ChannelDef
-	d.Name = plugin.CLIPRDR_SVC_CHANNEL_NAME
-	d.Options = uint32(CHANNEL_OPTION_INITIALIZED | CHANNEL_OPTION_ENCRYPT_RDP |
-		CHANNEL_OPTION_COMPRESS_RDP | CHANNEL_OPTION_SHOW_PROTOCOL)
-	n.ChannelDefArray = append(n.ChannelDefArray, d)
+	n.ChannelDefArray = append(n.ChannelDefArray, d2)*/
 
 	return n
 }
 
-func (d *ClientNetworkData) Pack() []byte {
+func (n *ClientNetworkData) AddVirtualChannel(name string, option uint32) {
+	var d ChannelDef
+	d.Name = name
+	d.Options = option
+	n.ChannelDefArray = append(n.ChannelDefArray, d)
+	n.ChannelCount++
+}
+
+func (n *ClientNetworkData) Pack() []byte {
 	buff := &bytes.Buffer{}
 	core.WriteUInt16LE(CS_NET, buff) // type
-	length := uint16(d.ChannelCount*12 + 8)
+	length := uint16(n.ChannelCount*12 + 8)
 	core.WriteUInt16LE(length, buff) // len 8
-	core.WriteUInt32LE(d.ChannelCount, buff)
-	for i := 0; i < int(d.ChannelCount); i++ {
-		v := d.ChannelDefArray[i]
+	core.WriteUInt32LE(n.ChannelCount, buff)
+	for i := 0; i < int(n.ChannelCount); i++ {
+		v := n.ChannelDefArray[i]
 		name := make([]byte, 8)
 		copy(name, []byte(v.Name))
 		core.WriteBytes(name[:], buff)
@@ -571,9 +570,6 @@ func ReadConferenceCreateResponse(data []byte) []interface{} {
 		return ret
 	}
 
-	glog.Debug("all:", SC_CORE, SC_SECURITY, SC_NET,
-		CS_CORE, CS_SECURITY, CS_NET, CS_CLUSTER, CS_MONITOR)
-
 	ln, _ := per.ReadLength(r)
 	for ln > 0 {
 		t, _ := core.ReadUint16LE(r)
@@ -601,7 +597,6 @@ func ReadConferenceCreateResponse(data []byte) []interface{} {
 			}
 			ret = append(ret, d)
 		}
-		glog.Debugf("d:%+v", d)
 	}
 
 	return ret

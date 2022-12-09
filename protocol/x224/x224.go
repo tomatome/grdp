@@ -70,6 +70,28 @@ func NewNegotiation() *Negotiation {
 	return &Negotiation{0, 0, 0x0008 /*constant*/, PROTOCOL_RDP}
 }
 
+type failureCode int
+
+const (
+	//The server requires that the client support Enhanced RDP Security (section 5.4) with either TLS 1.0, 1.1 or 1.2 (section 5.4.5.1) or CredSSP (section 5.4.5.2). If only CredSSP was requested then the server only supports TLS.
+	SSL_REQUIRED_BY_SERVER = 0x00000001
+
+	//The server is configured to only use Standard RDP Security mechanisms (section 5.3) and does not support any External Security Protocols (section 5.4.5).
+	SSL_NOT_ALLOWED_BY_SERVER = 0x00000002
+
+	//The server does not possess a valid authentication certificate and cannot initialize the External Security Protocol Provider (section 5.4.5).
+	SSL_CERT_NOT_ON_SERVER = 0x00000003
+
+	//The list of requested security protocols is not consistent with the current security protocol in effect. This error is only possible when the Direct Approach (sections 5.4.2.2 and 1.3.1.2) is used and an External Security Protocol (section 5.4.5) is already being used.
+	INCONSISTENT_FLAGS = 0x00000004
+
+	//The server requires that the client support Enhanced RDP Security (section 5.4) with CredSSP (section 5.4.5.2).
+	HYBRID_REQUIRED_BY_SERVER = 0x00000005
+
+	//The server requires that the client support Enhanced RDP Security (section 5.4) with TLS 1.0, 1.1 or 1.2 (section 5.4.5.1) and certificate-based client authentication.<4>
+	SSL_WITH_USER_AUTH_REQUIRED_BY_SERVER = 0x00000006
+)
+
 /**
  * X224 client connection request
  * @param opt {object} component type options
@@ -179,7 +201,7 @@ func (x *X224) Write(b []byte) (n int, err error) {
 	}
 	buff.Write(b)
 
-	glog.Debug("x224 write:", hex.EncodeToString(buff.Bytes()))
+	glog.Trace("x224 write:", hex.EncodeToString(buff.Bytes()))
 	return x.transport.Write(buff.Bytes())
 }
 
@@ -266,7 +288,7 @@ func (x *X224) recvConnectionConfirm(s []byte) {
 }
 
 func (x *X224) recvData(s []byte) {
-	glog.Debug("x224 recvData", hex.EncodeToString(s), "emit data")
+	glog.Trace("x224 recvData", hex.EncodeToString(s), "emit data")
 	// x224 header takes 3 bytes
 	x.Emit("data", s[3:])
 }

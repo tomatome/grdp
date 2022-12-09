@@ -47,6 +47,69 @@ const (
 	CAPSSETTYPE_FRAME_ACKNOWLEDGE             = 0x001E
 )
 
+func (c CapsType) String() string {
+	switch c {
+	case CAPSTYPE_GENERAL:
+		return "CAPSTYPE_GENERAL"
+	case CAPSTYPE_BITMAP:
+		return "CAPSTYPE_BITMAP"
+	case CAPSTYPE_ORDER:
+		return "CAPSTYPE_ORDER"
+	case CAPSTYPE_BITMAPCACHE:
+		return "CAPSTYPE_BITMAPCACHE"
+	case CAPSTYPE_CONTROL:
+		return "CAPSTYPE_CONTROL"
+	case CAPSTYPE_ACTIVATION:
+		return "CAPSTYPE_ACTIVATION"
+	case CAPSTYPE_POINTER:
+		return "CAPSTYPE_POINTER"
+	case CAPSTYPE_SHARE:
+		return "CAPSTYPE_SHARE"
+	case CAPSTYPE_COLORCACHE:
+		return "CAPSTYPE_COLORCACHE"
+	case CAPSTYPE_SOUND:
+		return "CAPSTYPE_SOUND"
+	case CAPSTYPE_INPUT:
+		return "CAPSTYPE_INPUT"
+	case CAPSTYPE_FONT:
+		return "CAPSTYPE_FONT"
+	case CAPSTYPE_BRUSH:
+		return "CAPSTYPE_BRUSH"
+	case CAPSTYPE_GLYPHCACHE:
+		return "CAPSTYPE_GLYPHCACHE"
+	case CAPSTYPE_OFFSCREENCACHE:
+		return "CAPSTYPE_OFFSCREENCACHE"
+	case CAPSTYPE_BITMAPCACHE_HOSTSUPPORT:
+		return "CAPSTYPE_BITMAPCACHE_HOSTSUPPORT"
+	case CAPSTYPE_BITMAPCACHE_REV2:
+		return "CAPSTYPE_BITMAPCACHE_REV2"
+	case CAPSTYPE_VIRTUALCHANNEL:
+		return "CAPSTYPE_VIRTUALCHANNEL"
+	case CAPSTYPE_DRAWNINEGRIDCACHE:
+		return "CAPSTYPE_DRAWNINEGRIDCACHE"
+	case CAPSTYPE_DRAWGDIPLUS:
+		return "CAPSTYPE_DRAWGDIPLUS"
+	case CAPSTYPE_RAIL:
+		return "CAPSTYPE_RAIL"
+	case CAPSTYPE_WINDOW:
+		return "CAPSTYPE_WINDOW"
+	case CAPSETTYPE_COMPDESK:
+		return "CAPSETTYPE_COMPDESK"
+	case CAPSETTYPE_MULTIFRAGMENTUPDATE:
+		return "CAPSETTYPE_MULTIFRAGMENTUPDATE"
+	case CAPSETTYPE_LARGE_POINTER:
+		return "CAPSETTYPE_LARGE_POINTER"
+	case CAPSETTYPE_SURFACE_COMMANDS:
+		return "CAPSETTYPE_SURFACE_COMMANDS"
+	case CAPSETTYPE_BITMAP_CODECS:
+		return "CAPSETTYPE_BITMAP_CODECS"
+	case CAPSSETTYPE_FRAME_ACKNOWLEDGE:
+		return "CAPSSETTYPE_FRAME_ACKNOWLEDGE"
+	}
+
+	return "Unknown"
+}
+
 type MajorType uint16
 
 const (
@@ -119,7 +182,7 @@ const (
 	TS_NEG_FAST_GLYPH_INDEX               = 0x18
 	TS_NEG_ELLIPSE_SC_INDEX               = 0x19
 	TS_NEG_ELLIPSE_CB_INDEX               = 0x1A
-	TS_NEG_INDEX_INDEX                    = 0x1B
+	TS_NEG_GLYPH_INDEX_INDEX              = 0x1B
 )
 
 type OrderEx uint16
@@ -235,6 +298,14 @@ const (
 	KBDFLAGS_RELEASE  = 0x8000
 )
 
+type SurfaceCmdFlags uint32
+
+const (
+	SURFCMDS_SET_SURFACE_BITS    = 0x00000002
+	SURFCMDS_FRAME_MARKER        = 0x00000010
+	SURFCMDS_STREAM_SURFACE_BITS = 0x00000040
+)
+
 type Capability interface {
 	Type() CapsType
 }
@@ -328,7 +399,7 @@ type PointerCapability struct {
 	ColorPointerFlag      uint16 `struc:"little"`
 	ColorPointerCacheSize uint16 `struc:"little"`
 	// old version of rdp doesn't support ...
-	// PointerCacheSize uint16 `struc:"little"` // only server need
+	PointerCacheSize uint16 `struc:"little"` // only server need
 }
 
 func (*PointerCapability) Type() CapsType {
@@ -391,6 +462,22 @@ type OffscreenBitmapCacheCapability struct {
 
 func (*OffscreenBitmapCacheCapability) Type() CapsType {
 	return CAPSTYPE_OFFSCREENCACHE
+}
+
+type BitmapCache2Capability struct {
+	BitmapCachePersist uint16   `struc:"little"`
+	Pad2octets         uint8    `struc:"little"`
+	CachesNum          uint8    `struc:"little"`
+	BmpC0Cells         uint32   `struc:"little"`
+	BmpC1Cells         uint32   `struc:"little"`
+	BmpC2Cells         uint32   `struc:"little"`
+	BmpC3Cells         uint32   `struc:"little"`
+	BmpC4Cells         uint32   `struc:"little"`
+	Pad2octets1        [12]byte `struc:"little"`
+}
+
+func (*BitmapCache2Capability) Type() CapsType {
+	return CAPSTYPE_BITMAPCACHE_REV2
 }
 
 type VirtualChannelCapability struct {
@@ -568,6 +655,24 @@ func (*SurfaceCommandsCapability) Type() CapsType {
 	return CAPSETTYPE_SURFACE_COMMANDS
 }
 
+type FrameAcknowledgeCapability struct {
+	FrameCount uint32 `struc:"little"`
+}
+
+func (*FrameAcknowledgeCapability) Type() CapsType {
+	return CAPSSETTYPE_FRAME_ACKNOWLEDGE
+}
+
+type DrawNineGridCapability struct {
+	SupportLevel uint32 `struc:"little"`
+	CacheSize    uint16 `struc:"little"`
+	CacheEntries uint16 `struc:"little"`
+}
+
+func (*DrawNineGridCapability) Type() CapsType {
+	return CAPSTYPE_DRAWNINEGRIDCACHE
+}
+
 func readCapability(r io.Reader) (Capability, error) {
 	capType, err := core.ReadUint16LE(r)
 	if err != nil {
@@ -639,9 +744,8 @@ func readCapability(r io.Reader) (Capability, error) {
 		c = &DesktopCompositionCapability{}
 	case CAPSETTYPE_SURFACE_COMMANDS:
 		c = &SurfaceCommandsCapability{}
-	//case CAPSSETTYPE_FRAME_ACKNOWLEDGE:
-	//c =
-	//glog.Error("CAPSSETTYPE_FRAME_ACKNOWLEDGE")
+	case CAPSSETTYPE_FRAME_ACKNOWLEDGE:
+		c = &FrameAcknowledgeCapability{}
 	default:
 		err := errors.New(fmt.Sprintf("unsupported Capability type 0x%04x", capType))
 		glog.Error(err)
@@ -651,6 +755,6 @@ func readCapability(r io.Reader) (Capability, error) {
 		glog.Error("Capability unpack error", err, fmt.Sprintf("0x%04x", capType), hex.EncodeToString(capBytes))
 		return nil, err
 	}
-	glog.Debugf("Capability: %+v", c)
+	glog.Debugf("Capability<%s>: %+v", c.Type(), c)
 	return c, nil
 }

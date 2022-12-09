@@ -19,6 +19,8 @@ const (
 	PDUTYPE_SERVER_REDIR_PKT = 0x1A
 )
 
+type PduType2 uint8
+
 const (
 	PDUTYPE2_UPDATE                      = 0x02
 	PDUTYPE2_CONTROL                     = 0x14
@@ -46,6 +48,61 @@ const (
 	PDUTYPE2_MONITOR_LAYOUT_PDU          = 0x37
 )
 
+func (p PduType2) String() string {
+	switch p {
+	case PDUTYPE2_UPDATE:
+		return "PDUTYPE2_UPDATE"
+	case PDUTYPE2_CONTROL:
+		return "PDUTYPE2_CONTROL"
+	case PDUTYPE2_POINTER:
+		return "PDUTYPE2_POINTER"
+	case PDUTYPE2_INPUT:
+		return "PDUTYPE2_INPUT"
+	case PDUTYPE2_SYNCHRONIZE:
+		return "PDUTYPE2_SYNCHRONIZE"
+	case PDUTYPE2_REFRESH_RECT:
+		return "PDUTYPE2_REFRESH_RECT"
+	case PDUTYPE2_PLAY_SOUND:
+		return "PDUTYPE2_PLAY_SOUND"
+	case PDUTYPE2_SUPPRESS_OUTPUT:
+		return "PDUTYPE2_SUPPRESS_OUTPUT"
+	case PDUTYPE2_SHUTDOWN_REQUEST:
+		return "PDUTYPE2_SHUTDOWN_REQUEST"
+	case PDUTYPE2_SHUTDOWN_DENIED:
+		return "PDUTYPE2_SHUTDOWN_DENIED"
+	case PDUTYPE2_SAVE_SESSION_INFO:
+		return "PDUTYPE2_SAVE_SESSION_INFO"
+	case PDUTYPE2_FONTLIST:
+		return "PDUTYPE2_FONTLIST"
+	case PDUTYPE2_FONTMAP:
+		return "PDUTYPE2_FONTMAP"
+	case PDUTYPE2_SET_KEYBOARD_INDICATORS:
+		return "PDUTYPE2_SET_KEYBOARD_INDICATORS"
+	case PDUTYPE2_BITMAPCACHE_PERSISTENT_LIST:
+		return "PDUTYPE2_BITMAPCACHE_PERSISTENT_LIST"
+	case PDUTYPE2_BITMAPCACHE_ERROR_PDU:
+		return "PDUTYPE2_BITMAPCACHE_ERROR_PDU"
+	case PDUTYPE2_SET_KEYBOARD_IME_STATUS:
+		return "PDUTYPE2_SET_KEYBOARD_IME_STATUS"
+	case PDUTYPE2_OFFSCRCACHE_ERROR_PDU:
+		return "PDUTYPE2_OFFSCRCACHE_ERROR_PDU"
+	case PDUTYPE2_SET_ERROR_INFO_PDU:
+		return "PDUTYPE2_SET_ERROR_INFO_PDU"
+	case PDUTYPE2_DRAWNINEGRID_ERROR_PDU:
+		return "PDUTYPE2_DRAWNINEGRID_ERROR_PDU"
+	case PDUTYPE2_DRAWGDIPLUS_ERROR_PDU:
+		return "PDUTYPE2_DRAWGDIPLUS_ERROR_PDU"
+	case PDUTYPE2_ARC_STATUS_PDU:
+		return "PDUTYPE2_ARC_STATUS_PDU"
+	case PDUTYPE2_STATUS_INFO_PDU:
+		return "PDUTYPE2_STATUS_INFO_PDU"
+	case PDUTYPE2_MONITOR_LAYOUT_PDU:
+		return "PDUTYPE2_MONITOR_LAYOUT_PDU"
+	}
+
+	return "Unknown"
+}
+
 const (
 	CTRLACTION_REQUEST_CONTROL = 0x0001
 	CTRLACTION_GRANTED_CONTROL = 0x0002
@@ -60,23 +117,66 @@ const (
 	STREAM_HI        = 0x04
 )
 
+type FastPathUpdateType uint8
+
 const (
-	FASTPATH_UPDATETYPE_ORDERS       = 0x0
-	FASTPATH_UPDATETYPE_BITMAP       = 0x1
-	FASTPATH_UPDATETYPE_PALETTE      = 0x2
-	FASTPATH_UPDATETYPE_SYNCHRONIZE  = 0x3
-	FASTPATH_UPDATETYPE_SURFCMDS     = 0x4
-	FASTPATH_UPDATETYPE_PTR_NULL     = 0x5
-	FASTPATH_UPDATETYPE_PTR_DEFAULT  = 0x6
-	FASTPATH_UPDATETYPE_PTR_POSITION = 0x8
-	FASTPATH_UPDATETYPE_COLOR        = 0x9
-	FASTPATH_UPDATETYPE_CACHED       = 0xA
-	FASTPATH_UPDATETYPE_POINTER      = 0xB
+	FASTPATH_UPDATETYPE_ORDERS        = 0x0
+	FASTPATH_UPDATETYPE_BITMAP        = 0x1
+	FASTPATH_UPDATETYPE_PALETTE       = 0x2
+	FASTPATH_UPDATETYPE_SYNCHRONIZE   = 0x3
+	FASTPATH_UPDATETYPE_SURFCMDS      = 0x4
+	FASTPATH_UPDATETYPE_PTR_NULL      = 0x5
+	FASTPATH_UPDATETYPE_PTR_DEFAULT   = 0x6
+	FASTPATH_UPDATETYPE_PTR_POSITION  = 0x8
+	FASTPATH_UPDATETYPE_COLOR         = 0x9
+	FASTPATH_UPDATETYPE_CACHED        = 0xA
+	FASTPATH_UPDATETYPE_POINTER       = 0xB
+	FASTPATH_UPDATETYPE_LARGE_POINTER = 0xC
 )
+
+func (t FastPathUpdateType) String() string {
+	switch t {
+	case FASTPATH_UPDATETYPE_ORDERS:
+		return "FASTPATH_UPDATETYPE_ORDERS"
+	case FASTPATH_UPDATETYPE_BITMAP:
+		return "FASTPATH_UPDATETYPE_BITMAP"
+	case FASTPATH_UPDATETYPE_PALETTE:
+		return "FASTPATH_UPDATETYPE_PALETTE"
+	case FASTPATH_UPDATETYPE_SYNCHRONIZE:
+		return "FASTPATH_UPDATETYPE_SYNCHRONIZE"
+	case FASTPATH_UPDATETYPE_SURFCMDS:
+		return "FASTPATH_UPDATETYPE_SURFCMDS"
+	case FASTPATH_UPDATETYPE_PTR_NULL:
+		return "FASTPATH_UPDATETYPE_PTR_NULL"
+	case FASTPATH_UPDATETYPE_PTR_DEFAULT:
+		return "FASTPATH_UPDATETYPE_PTR_DEFAULT"
+	case FASTPATH_UPDATETYPE_PTR_POSITION:
+		return "FASTPATH_UPDATETYPE_PTR_POSITION"
+	case FASTPATH_UPDATETYPE_COLOR:
+		return "FASTPATH_UPDATETYPE_COLOR"
+	case FASTPATH_UPDATETYPE_CACHED:
+		return "FASTPATH_UPDATETYPE_CACHED"
+	case FASTPATH_UPDATETYPE_POINTER:
+		return "FASTPATH_UPDATETYPE_POINTER"
+	case FASTPATH_UPDATETYPE_LARGE_POINTER:
+		return "FASTPATH_UPDATETYPE_LARGE_POINTER"
+	}
+
+	return "Unknown"
+}
 
 const (
 	BITMAP_COMPRESSION = 0x0001
 	//NO_BITMAP_COMPRESSION_HDR = 0x0400
+)
+
+/* compression types */
+const (
+	RDP_MPPC_BIG        = 0x01
+	RDP_MPPC_COMPRESSED = 0x20
+	RDP_MPPC_RESET      = 0x40
+	RDP_MPPC_FLUSH      = 0x80
+	RDP_MPPC_DICT_SIZE  = 65536
 )
 
 type ShareDataHeader struct {
@@ -154,7 +254,7 @@ func readDemandActivePDU(r io.Reader) (*DemandActivePDU, error) {
 	d.SourceDescriptor = sourceDescriptorBytes
 	d.NumberCapabilities, err = core.ReadUint16LE(r)
 	d.Pad2Octets, err = core.ReadUint16LE(r)
-	d.CapabilitySets = make([]Capability, 0)
+	d.CapabilitySets = make([]Capability, 0, d.NumberCapabilities)
 	glog.Debug("NumberCapabilities is", d.NumberCapabilities)
 	for i := 0; i < int(d.NumberCapabilities); i++ {
 		c, err := readCapability(r)
@@ -166,7 +266,6 @@ func readDemandActivePDU(r io.Reader) (*DemandActivePDU, error) {
 	}
 	d.NumberCapabilities = uint16(len(d.CapabilitySets))
 	d.SessionId, err = core.ReadUInt32LE(r)
-	//glog.Info("SessionId:", d.SessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -199,9 +298,6 @@ func (c *ConfirmActivePDU) Serialize() []byte {
 		core.WriteUInt16LE(uint16(capa.Type()), capsBuff)
 		capBuff := &bytes.Buffer{}
 		struc.Pack(capBuff, capa)
-		if capa.Type() == CAPSTYPE_INPUT {
-			core.WriteBytes([]byte{0x0c, 0x00, 0x00, 0x00}, capBuff)
-		}
 		capBytes := capBuff.Bytes()
 		core.WriteUInt16LE(uint16(len(capBytes)+4), capsBuff)
 		core.WriteBytes(capBytes, capsBuff)
@@ -209,8 +305,8 @@ func (c *ConfirmActivePDU) Serialize() []byte {
 	capsBytes := capsBuff.Bytes()
 
 	core.WriteUInt16LE(uint16(2+2+len(capsBytes)), buff)
-	core.WriteBytes([]byte(c.SourceDescriptor), buff)
-	core.WriteUInt16LE(uint16(len(c.CapabilitySets)), buff)
+	core.WriteBytes(c.SourceDescriptor, buff)
+	core.WriteUInt16LE(c.NumberCapabilities, buff)
 	core.WriteUInt16LE(c.Pad2Octets, buff)
 	core.WriteBytes(capsBytes, buff)
 	return buff.Bytes()
@@ -335,7 +431,7 @@ func readDataPDU(r io.Reader) (*DataPDU, error) {
 		return nil, err
 	}
 	var d DataPDUData
-	glog.Debugf("header=%02x", header.PDUType2)
+	glog.Debugf("PDUType2 0x%02x", header.PDUType2)
 	switch header.PDUType2 {
 	case PDUTYPE2_SYNCHRONIZE:
 		d = &SynchronizeDataPDU{}
@@ -365,7 +461,7 @@ func readDataPDU(r io.Reader) (*DataPDU, error) {
 		}
 	}
 
-	glog.Debugf("d=%+v", d)
+	glog.Debugf("PDUType2<%s>: %+v", PduType2(d.Type2()), d)
 	p := &DataPDU{
 		Header: header,
 		Data:   d,
@@ -499,7 +595,7 @@ func (s *SaveSessionInfo) logonPlainNotify(r io.Reader) (err error) {
 func (s *SaveSessionInfo) logonInfoExtended(r io.Reader) (err error) {
 	s.Length, err = core.ReadUint16LE(r)
 	s.FieldsPresent, err = core.ReadUInt32LE(r)
-	glog.Info("FieldsPresent:", s.FieldsPresent)
+	//glog.Info("FieldsPresent:", s.FieldsPresent)
 	// auto reconnect cookie
 	if s.FieldsPresent&LOGON_EX_AUTORECONNECTCOOKIE != 0 {
 		core.ReadUInt32LE(r)
@@ -638,8 +734,43 @@ func (*FastPathBitmapUpdateDataPDU) FastPathUpdateType() uint8 {
 	return FASTPATH_UPDATETYPE_BITMAP
 }
 
+type FastPathColorPdu struct {
+	CacheIdx uint16
+	X        uint16
+	Y        uint16
+	Width    uint16
+	Height   uint16
+	MaskLen  uint16 `struc:"little,sizeof=Mask"`
+	DataLen  uint16 `struc:"little,sizeof=Data"`
+	Mask     []byte
+	Data     []byte
+}
+
+func (*FastPathColorPdu) FastPathUpdateType() uint8 {
+	return FASTPATH_UPDATETYPE_COLOR
+}
+func (f *FastPathColorPdu) Unpack(r io.Reader) error {
+	return struc.Unpack(r, f)
+}
+
+type FastPathSurfaceCmds struct {
+}
+
+func (*FastPathSurfaceCmds) FastPathUpdateType() uint8 {
+	return FASTPATH_UPDATETYPE_SURFCMDS
+}
+func (f *FastPathSurfaceCmds) Unpack(r io.Reader) error {
+	cmdType, _ := core.ReadUint16LE(r)
+	switch cmdType {
+
+	}
+
+	return nil
+}
+
 type FastPathUpdatePDU struct {
 	UpdateHeader     uint8
+	Fragmentation    uint8
 	CompressionFlags uint8
 	Size             uint16
 	Data             UpdateData
@@ -649,47 +780,47 @@ const (
 	FASTPATH_OUTPUT_COMPRESSION_USED = 0x2
 )
 
-func readFastPathUpdatePDU(r io.Reader) (*FastPathUpdatePDU, error) {
+const (
+	FASTPATH_FRAGMENT_SINGLE = (0x0 << 4)
+	FASTPATH_FRAGMENT_LAST   = (0x1 << 4)
+	FASTPATH_FRAGMENT_FIRST  = (0x2 << 4)
+	FASTPATH_FRAGMENT_NEXT   = (0x3 << 4)
+)
+
+func readFastPathUpdatePDU(r io.Reader, code uint8) (*FastPathUpdatePDU, error) {
 	f := &FastPathUpdatePDU{}
 	var err error
-	f.UpdateHeader, err = core.ReadUInt8(r)
-	if err != nil {
-		return nil, err
-	}
-	if (f.UpdateHeader>>4)&FASTPATH_OUTPUT_COMPRESSION_USED != 0 {
-		f.CompressionFlags, err = core.ReadUInt8(r)
-	}
-
-	f.Size, err = core.ReadUint16LE(r)
-	if err != nil {
-		return nil, err
-	}
-	if f.Size == 0 {
-		return f, nil
-	}
-	dataBytes, err := core.ReadBytes(int(f.Size), r)
-	if err != nil {
-		glog.Info(err)
-		return nil, err
-	}
-
 	var d UpdateData
-	glog.Debugf("Fast Path PDU type 0x%x", f.UpdateHeader)
-	switch f.UpdateHeader & 0xf {
+	//glog.Debugf("FastPathPDU type %s(0x%x)", FastPathUpdateType(code), code)
+	switch code {
+	case FASTPATH_UPDATETYPE_ORDERS:
+		d = &FastPathOrdersPDU{}
 	case FASTPATH_UPDATETYPE_BITMAP:
 		d = &FastPathBitmapUpdateDataPDU{}
-
+	case FASTPATH_UPDATETYPE_PALETTE:
+	case FASTPATH_UPDATETYPE_SYNCHRONIZE:
+	case FASTPATH_UPDATETYPE_SURFCMDS:
+		//d = &FastPathSurfaceCmds{}
+	case FASTPATH_UPDATETYPE_PTR_NULL:
+	case FASTPATH_UPDATETYPE_PTR_DEFAULT:
+	case FASTPATH_UPDATETYPE_PTR_POSITION:
+	case FASTPATH_UPDATETYPE_COLOR:
+		//d = &FastPathColorPdu{}
+	case FASTPATH_UPDATETYPE_CACHED:
+	case FASTPATH_UPDATETYPE_POINTER:
+	case FASTPATH_UPDATETYPE_LARGE_POINTER:
 	default:
-		glog.Debugf("Unknown Fast Path PDU type 0x%x", f.UpdateHeader)
-		return f, errors.New(fmt.Sprintf("Unknown Fast Path PDU type 0x%x", f.UpdateHeader))
-		//d = nil
+		glog.Debugf("Unknown FastPathPDU type 0x%x", code)
+		return f, errors.New(fmt.Sprintf("Unknown FastPathPDU type 0x%x", code))
 	}
 	if d != nil {
-		err = d.Unpack(bytes.NewReader(dataBytes))
+		err = d.Unpack(r)
 		if err != nil {
-			glog.Error("Unpack:", err)
+			//glog.Error("Unpack:", err)
 			return nil, err
 		}
+	} else {
+		return nil, errors.New(fmt.Sprintf("Unsupport FastPathPDU type 0x%x", code))
 	}
 
 	f.Data = d

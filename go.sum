@@ -36,8 +36,8 @@ github.com/shirou/w32 v0.0.0-20160930032740-bb4de0191aa4/go.mod h1:qsXQc7+bwAM3Q
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.5.1 h1:nOGnQDM7FYENwehXlg/kFVnos3rEvtKTjRvOWSzb6H4=
 github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
-github.com/tomatome/win v0.3.0 h1:IezE/bpr7HBb5/gl4IRxputcFOrjGZHHiL3Rn1JswEo=
-github.com/tomatome/win v0.3.0/go.mod h1:YY2OpEdJ5Z1gOya7w+W7Ziv/lRIiokxlQgj4i7QgbhY=
+github.com/tomatome/win v0.3.1 h1:jDUqhWwWNVAyr/hwzMWfgSIDXX9I4Opjy/XAlPAKh/Q=
+github.com/tomatome/win v0.3.1/go.mod h1:YY2OpEdJ5Z1gOya7w+W7Ziv/lRIiokxlQgj4i7QgbhY=
 golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d h1:sK3txAijHtOK88l68nt020reeT1ZdKLIYetKl95FzVY=
 golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
 golang.org/x/image v0.0.0-20220617043117-41969df76e82 h1:KpZB5pUSBvrHltNEdK/tw0xlPeD13M6M6aGP32gKqiw=
