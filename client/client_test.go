@@ -13,8 +13,8 @@ func TestClient(t *testing.T) {
 	if err != nil {
 		fmt.Println("Login:", err)
 	}
-	c.OnBitmap(func(b []Bitmap) {
-		fmt.Println("ready:", b)
+	c.OnReady(func() {
+		fmt.Println("ready")
 	})
 	time.Sleep(100 * time.Second)
 }

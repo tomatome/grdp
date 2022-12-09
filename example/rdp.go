@@ -65,7 +65,7 @@ func uiRdp(info *Info) (error, *RdpClient) {
 	g.info = info
 	err := g.Login()
 	if err != nil {
-		fmt.Println("Login:", err)
+		glog.Error("Login:", err)
 		return err, nil
 	}
 	cc := cliprdr.NewCliprdrClient()
@@ -81,7 +81,7 @@ func uiRdp(info *Info) (error, *RdpClient) {
 	}).On("ready", func() {
 		glog.Info("on ready")
 
-	}).On("update", func(rectangles []pdu.BitmapData) {
+	}).On("bitmap", func(rectangles []pdu.BitmapData) {
 		glog.Info("on update Bitmap:", len(rectangles))
 		bs := make([]Bitmap, 0, 50)
 		for _, v := range rectangles {

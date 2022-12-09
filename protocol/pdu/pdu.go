@@ -332,7 +332,7 @@ func (c *Client) RecvFastPath(secFlag byte, s []byte) {
 			return
 		}
 		if p.UpdateHeader == FASTPATH_UPDATETYPE_BITMAP {
-			c.Emit("update", p.Data.(*FastPathBitmapUpdateDataPDU).Rectangles)
+			c.Emit("bitmap", p.Data.(*FastPathBitmapUpdateDataPDU).Rectangles)
 		}
 	}
 }

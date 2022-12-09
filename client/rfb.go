@@ -23,7 +23,7 @@ func (c *VncClient) Login(host, user, pwd string, width, height int) error {
 		return fmt.Errorf("[dial err] %v", err)
 	}
 
-	c.vnc = rfb.NewRFB(rfb.NewRFBConn(conn))
+	c.vnc = rfb.NewRFB(rfb.NewRFBConn(conn, pwd))
 
 	err = c.vnc.Connect()
 	if err != nil {

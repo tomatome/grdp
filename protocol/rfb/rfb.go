@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/des"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -34,17 +35,19 @@ const (
 type RFBConn struct {
 	emission.Emitter
 	// The Socket connection to the client
-	Conn    net.Conn
-	s       *ServerInit
-	NbRect  uint16
-	BitRect *BitRect
+	Conn     net.Conn
+	s        *ServerInit
+	NbRect   uint16
+	BitRect  *BitRect
+	Password string
 }
 
-func NewRFBConn(s net.Conn) *RFBConn {
+func NewRFBConn(s net.Conn, passwd string) *RFBConn {
 	fc := &RFBConn{
-		Emitter: *emission.NewEmitter(),
-		Conn:    s,
-		BitRect: new(BitRect),
+		Emitter:  *emission.NewEmitter(),
+		Conn:     s,
+		BitRect:  new(BitRect),
+		Password: passwd,
 	}
 	core.StartReadBytes(12, fc, fc.recvProtocolVersion)
 
@@ -137,7 +140,7 @@ func fixDesKey(key []byte) []byte {
 
 func (fc *RFBConn) recvVNCChallenge(s []byte, err error) {
 	glog.Debug("RFBConn recvVNCChallenge", hex.EncodeToString(s), len(s), err)
-	key := core.Random(8)
+	key := core.UnicodeEncode(fc.Password)
 	bk, err := des.NewCipher(fixDesKey(key))
 	if err != nil {
 		log.Printf("Error generating authentication cipher: %s\n", err.Error())
@@ -317,7 +320,7 @@ func (fc *RFBConn) recvRectBody(s []byte, err error) {
 	fc.NbRect--
 	glog.Info("fc.NbRect:", fc.NbRect)
 	if fc.NbRect == 0 {
-		fc.Emit("update", fc.BitRect)
+		fc.Emit("bitmap", fc.BitRect)
 		fc.sendFramebufferUpdateRequest(1, 0, 0, fc.s.Width, fc.s.Height)
 		core.StartReadBytes(1, fc, fc.recvServerOrder)
 	} else {
@@ -394,15 +397,20 @@ type RFB struct {
 	PixelFormat   *PixelFormat
 	NbRect        int
 	CurrentRect   *Rectangle
-	Password      string
 }
 
 func NewRFB(t core.Transport) *RFB {
-	fb := &RFB{t, RFB003008, SEC_INVALID, "", NewPixelFormat(), 0, &Rectangle{}, ""}
-
-	fb.Once("data", fb.recvProtocolVersion)
+	fb := &RFB{t, RFB003008, SEC_INVALID, "", NewPixelFormat(), 0, &Rectangle{}}
 
 	return fb
+}
+
+func (fb *RFB) Connect() error {
+	if fb.Transport == nil {
+		return errors.New("no transport")
+	}
+	fb.Once("data", fb.recvProtocolVersion)
+	return nil
 }
 
 func (fb *RFB) recvProtocolVersion(version string) {

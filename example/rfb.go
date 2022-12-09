@@ -16,6 +16,7 @@ type VncClient struct {
 	Width  int
 	Height int
 	vnc    *rfb.RFB
+	info   *Info
 }
 
 func NewVncClient(host string, width, height int, logLevel glog.LEVEL) *VncClient {
@@ -28,8 +29,12 @@ func NewVncClient(host string, width, height int, logLevel glog.LEVEL) *VncClien
 func uiVnc(info *Info) (error, *VncClient) {
 	BitmapCH = make(chan []Bitmap, 500)
 	g := NewVncClient(fmt.Sprintf("%s:%s", info.Ip, info.Port), info.Width, info.Height, glog.INFO)
-
-	g.Login()
+	g.info = info
+	err := g.Login()
+	if err != nil {
+		glog.Error("Login:", err)
+		return err, nil
+	}
 
 	return nil, g
 }
@@ -39,8 +44,12 @@ func (g *VncClient) Login() error {
 	if err != nil {
 		return fmt.Errorf("[dial err] %v", err)
 	}
-	//defer conn.Close()
-	g.vnc = rfb.NewRFB(rfb.NewRFBConn(conn))
+
+	g.vnc = rfb.NewRFB(rfb.NewRFBConn(conn, g.info.Passwd))
+	err = g.vnc.Connect()
+	if err != nil {
+		return fmt.Errorf("[vnc connect err] %v", err)
+	}
 
 	g.vnc.On("error", func(e error) {
 		glog.Info("on error")
@@ -53,8 +62,8 @@ func (g *VncClient) Login() error {
 		glog.Info("on success")
 	}).On("ready", func() {
 		glog.Info("on ready")
-	}).On("update", func(br *rfb.BitRect) {
-		glog.Debug("on update:", br)
+	}).On("bitmap", func(br *rfb.BitRect) {
+		glog.Debug("on bitmap:", br)
 		bs := make([]Bitmap, 0, 50)
 		for _, v := range br.Rects {
 			b := Bitmap{int(v.Rect.X), int(v.Rect.Y), int(v.Rect.X + v.Rect.Width), int(v.Rect.Y + v.Rect.Height),

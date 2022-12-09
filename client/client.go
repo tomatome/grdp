@@ -131,7 +131,7 @@ func (c *Client) OnBitmap(f func([]Bitmap)) {
 		f(bs)
 	}
 
-	c.ctl.On("update", f1)
+	c.ctl.On("bitmap", f1)
 }
 
 type Bitmap struct {
