@@ -171,7 +171,7 @@ func (c *Client) recvDemandActivePDU(s []byte) {
 	}
 	c.sharedId = pdu.Message.(*DemandActivePDU).SharedId
 	c.demandActivePDU = pdu.Message.(*DemandActivePDU)
-	for _, caps := range pdu.Message.(*DemandActivePDU).CapabilitySets {
+	for _, caps := range c.demandActivePDU.CapabilitySets {
 		glog.Debugf("serverCapabilities<%s>: %+v", caps.Type(), caps)
 		c.serverCapabilities[caps.Type()] = caps
 	}

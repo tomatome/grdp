@@ -683,7 +683,7 @@ func readCapability(r io.Reader) (Capability, error) {
 		return nil, err
 	}
 	if int(capLen)-4 <= 0 {
-		return nil, err
+		return nil, errors.New(fmt.Sprintf("Capability length expected %d", capLen))
 	}
 
 	capBytes, err := core.ReadBytes(int(capLen)-4, r)

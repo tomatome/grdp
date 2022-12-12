@@ -592,8 +592,7 @@ func ReadConferenceCreateResponse(data []byte) []interface{} {
 			r := bytes.NewReader(dataBytes)
 			err := d.Unpack(r)
 			if err != nil {
-				glog.Error("Unpack:", err)
-				return ret
+				glog.Warn("Unpack:", err)
 			}
 			ret = append(ret, d)
 		}

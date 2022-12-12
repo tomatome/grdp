@@ -170,8 +170,8 @@ type RDPInfo struct {
 
 func NewRDPInfo() *RDPInfo {
 	info := &RDPInfo{
-		Flag: INFO_MOUSE | INFO_UNICODE | INFO_LOGONNOTIFY |
-			INFO_LOGONERRORS | INFO_DISABLECTRLALTDEL | INFO_ENABLEWINDOWSKEY |
+		Flag: INFO_MOUSE | INFO_UNICODE | INFO_MAXIMIZESHELL |
+			INFO_ENABLEWINDOWSKEY | INFO_DISABLECTRLALTDEL | INFO_MOUSE_HAS_WHEEL |
 			INFO_FORCE_ENCRYPTED_CS_PDU | INFO_AUTOLOGON,
 		Domain:         []byte{0, 0},
 		UserName:       []byte{0, 0},
@@ -185,6 +185,10 @@ func NewRDPInfo() *RDPInfo {
 
 func (o *RDPInfo) SetClientAutoReconnect(auto *ClientAutoReconnect) {
 	o.ExtendedInfo.AutoReconnect = auto
+}
+
+func (o *RDPInfo) SetClientInfo() {
+	o.Flag |= INFO_LOGONNOTIFY | INFO_LOGONERRORS
 }
 
 func (o *RDPInfo) Serialize(hasExtended bool) []byte {
