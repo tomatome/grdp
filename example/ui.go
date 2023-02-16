@@ -55,10 +55,16 @@ func appMain(driver gxui.Driver) {
 		//gc.MouseWheel(e.ScrollY, e.Point.X, e.Point.Y)
 	})
 	window.OnKeyDown(func(e gxui.KeyboardEvent) {
+		if gc == nil {
+			return
+		}
 		key := transKey(e.Key)
 		gc.KeyDown(key, "")
 	})
 	window.OnKeyUp(func(e gxui.KeyboardEvent) {
+		if gc == nil {
+			return
+		}
 		key := transKey(e.Key)
 		gc.KeyUp(key, "")
 	})

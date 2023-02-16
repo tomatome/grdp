@@ -5,8 +5,7 @@ import (
 	"encoding/base64"
 	"io"
 
-	"github.com/googollee/go-socket.io/engineio/frame"
-	"github.com/googollee/go-socket.io/engineio/packet"
+	"github.com/googollee/go-socket.io/engineio/base"
 )
 
 type writerFeeder interface {
@@ -18,8 +17,8 @@ type encoder struct {
 	supportBinary bool
 	feeder        writerFeeder
 
-	ft         frame.Type
-	pt         packet.Type
+	ft         base.FrameType
+	pt         base.PacketType
 	header     bytes.Buffer
 	frameCache bytes.Buffer
 	b64Writer  io.WriteCloser
@@ -33,7 +32,7 @@ func (e *encoder) NOOP() []byte {
 	return []byte("1:6")
 }
 
-func (e *encoder) NextWriter(ft frame.Type, pt packet.Type) (io.WriteCloser, error) {
+func (e *encoder) NextWriter(ft base.FrameType, pt base.PacketType) (io.WriteCloser, error) {
 	w, err := e.feeder.getWriter()
 	if err != nil {
 		return nil, err
@@ -44,7 +43,7 @@ func (e *encoder) NextWriter(ft frame.Type, pt packet.Type) (io.WriteCloser, err
 	e.pt = pt
 	e.frameCache.Reset()
 
-	if !e.supportBinary && ft == frame.Binary {
+	if !e.supportBinary && ft == base.FrameBinary {
 		e.b64Writer = base64.NewEncoder(base64.StdEncoding, &e.frameCache)
 	} else {
 		e.b64Writer = nil
@@ -68,7 +67,7 @@ func (e *encoder) Close() error {
 	if e.supportBinary {
 		writeHeader = e.writeBinaryHeader
 	} else {
-		if e.ft == frame.Binary {
+		if e.ft == base.FrameBinary {
 			writeHeader = e.writeB64Header
 		} else {
 			writeHeader = e.writeTextHeader
@@ -113,7 +112,7 @@ func (e *encoder) writeB64Header() error {
 func (e *encoder) writeBinaryHeader() error {
 	l := int64(e.frameCache.Len() + 1) // length for packet type
 	b := e.pt.StringByte()
-	if e.ft == frame.Binary {
+	if e.ft == base.FrameBinary {
 		b = e.pt.BinaryByte()
 	}
 	err := e.header.WriteByte(e.ft.Byte())

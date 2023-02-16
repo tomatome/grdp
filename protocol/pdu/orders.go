@@ -2,6 +2,7 @@ package pdu
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 
@@ -26,28 +27,28 @@ const (
 type PrimaryOrderType uint8
 
 const (
-	ORDER_TYPE_DSTBLT             = 0x00 //0
-	ORDER_TYPE_PATBLT             = 0x01 //1
-	ORDER_TYPE_SCRBLT             = 0x02 //2
-	ORDER_TYPE_DRAWNINEGRID       = 0x07 //7
-	ORDER_TYPE_MULTI_DRAWNINEGRID = 0x08 //8
-	ORDER_TYPE_LINETO             = 0x09 //9
-	ORDER_TYPE_OPAQUERECT         = 0x0A //10
-	ORDER_TYPE_SAVEBITMAP         = 0x0B //11
-	ORDER_TYPE_MEMBLT             = 0x0D //13
-	ORDER_TYPE_MEM3BLT            = 0x0E //14
-	ORDER_TYPE_MULTIDSTBLT        = 0x0F //15
-	ORDER_TYPE_MULTIPATBLT        = 0x10 //16
-	ORDER_TYPE_MULTISCRBLT        = 0x11 //17
-	ORDER_TYPE_MULTIOPAQUERECT    = 0x12 //18
-	ORDER_TYPE_FAST_INDEX         = 0x13 //19
-	ORDER_TYPE_POLYGON_SC         = 0x14 //20
-	ORDER_TYPE_POLYGON_CB         = 0x15 //21
-	ORDER_TYPE_POLYLINE           = 0x16 //22
-	ORDER_TYPE_FAST_GLYPH         = 0x18 //24
-	ORDER_TYPE_ELLIPSE_SC         = 0x19 //25
-	ORDER_TYPE_ELLIPSE_CB         = 0x1A //26
-	ORDER_TYPE_GLYPHINDEX         = 0x1B //27
+	ORDER_TYPE_DSTBLT = 0x00 //0
+	ORDER_TYPE_PATBLT = 0x01 //1
+	ORDER_TYPE_SCRBLT = 0x02 //2
+	//ORDER_TYPE_DRAWNINEGRID       = 0x07 //7
+	//ORDER_TYPE_MULTI_DRAWNINEGRID = 0x08 //8
+	ORDER_TYPE_LINETO     = 0x09 //9
+	ORDER_TYPE_OPAQUERECT = 0x0A //10
+	ORDER_TYPE_SAVEBITMAP = 0x0B //11
+	ORDER_TYPE_MEMBLT     = 0x0D //13
+	ORDER_TYPE_MEM3BLT    = 0x0E //14
+	//ORDER_TYPE_MULTIDSTBLT        = 0x0F //15
+	//ORDER_TYPE_MULTIPATBLT        = 0x10 //16
+	//ORDER_TYPE_MULTISCRBLT        = 0x11 //17
+	//ORDER_TYPE_MULTIOPAQUERECT    = 0x12 //18
+	//ORDER_TYPE_FAST_INDEX         = 0x13 //19
+	ORDER_TYPE_POLYGON_SC = 0x14 //20
+	ORDER_TYPE_POLYGON_CB = 0x15 //21
+	ORDER_TYPE_POLYLINE   = 0x16 //22
+	//ORDER_TYPE_FAST_GLYPH         = 0x18 //24
+	ORDER_TYPE_ELLIPSE_SC = 0x19 //25
+	ORDER_TYPE_ELLIPSE_CB = 0x1A //26
+	ORDER_TYPE_TEXT2      = 0x1B //27
 )
 
 type SecondaryOrderType uint8
@@ -115,55 +116,40 @@ const (
 	CBR2_DO_NOT_CACHE              = 0x10
 )
 
-type FastPathOrdersPDU struct {
-	NumberOrders uint16
-	OrderPdus    []OrderPdu
-}
-
-type OrderPdu struct {
-	ControlFlags uint8
-	Data         OrderData
-}
-
 const (
-	ORDER_PRIMARY = iota + 1
+	ORDER_PRIMARY = iota
 	ORDER_SECONDARY
 	ORDER_ALTSEC
 )
 
-type OrderData interface {
-	Type() int
+type OrderPdu struct {
+	ControlFlags uint8
+	Type         int
+	Altsec       *Altsec
+	Primary      *Primary
+	Secondary    *Secondary
 }
 
-type orderMemblt struct {
-	colorTable uint8
-	cacheId    uint8
-	x          uint16
-	y          uint16
-	cx         uint16
-	cy         uint16
-	opcode     uint8
-	srcx       int16
-	srcy       int16
-	cacheIdx   uint16
+func (o *OrderPdu) HasBounds() bool {
+	return o.ControlFlags&TS_BOUNDS != 0
+}
+
+type Altsec struct {
 }
 
 type Secondary struct {
 }
 
-func (*Secondary) Type() int {
-	return ORDER_SECONDARY
-}
-
 type Primary struct {
-	delta   bool
-	present uint32
-	Scrblt  Scrblt
+	Bounds Bounds
+	Data   PrimaryOrder
 }
 
-func (*Primary) Type() int {
-	return ORDER_PRIMARY
+type FastPathOrdersPDU struct {
+	NumberOrders uint16
+	OrderPdus    []OrderPdu
 }
+
 func (*FastPathOrdersPDU) FastPathUpdateType() uint8 {
 	return FASTPATH_UPDATETYPE_ORDERS
 }
@@ -173,17 +159,20 @@ func (f *FastPathOrdersPDU) Unpack(r io.Reader) error {
 	//glog.Info("NumberOrders:", f.NumberOrders)
 	for i := 0; i < int(f.NumberOrders); i++ {
 		var o OrderPdu
-		cflags, _ := core.ReadUInt8(r)
-		if cflags&TS_STANDARD == 0 {
+		o.ControlFlags, _ = core.ReadUInt8(r)
+		if o.ControlFlags&TS_STANDARD == 0 {
 			//glog.Info("Altsec order")
-			o.processAltsecOrder(r, cflags)
+			o.processAltsecOrder(r)
+			o.Type = ORDER_ALTSEC
 			//return errors.New("Not support")
-		} else if cflags&TS_SECONDARY != 0 {
+		} else if o.ControlFlags&TS_SECONDARY != 0 {
 			//glog.Info("Secondary order")
-			o.processSecondaryOrder(r, cflags)
+			o.processSecondaryOrder(r)
+			o.Type = ORDER_SECONDARY
 		} else {
-			glog.Info("Primary order")
-			o.processPrimaryOrder(r, cflags)
+			//glog.Info("Primary order")
+			o.processPrimaryOrder(r)
+			o.Type = ORDER_PRIMARY
 		}
 
 		if f.OrderPdus == nil {
@@ -193,8 +182,8 @@ func (f *FastPathOrdersPDU) Unpack(r io.Reader) error {
 	}
 	return nil
 }
-func (o *OrderPdu) processAltsecOrder(r io.Reader, cflags uint8) error {
-	orderType := cflags >> 2
+func (o *OrderPdu) processAltsecOrder(r io.Reader) error {
+	orderType := o.ControlFlags >> 2
 	//glog.Info("Altsec:", orderType)
 	switch orderType {
 	case ORDER_TYPE_SWITCH_SURFACE:
@@ -216,7 +205,7 @@ func (o *OrderPdu) processAltsecOrder(r io.Reader, cflags uint8) error {
 
 	return nil
 }
-func (o *OrderPdu) processSecondaryOrder(r io.Reader, cflags uint8) error {
+func (o *OrderPdu) processSecondaryOrder(r io.Reader) error {
 	var sec Secondary
 	length, _ := core.ReadUint16LE(r)
 	flags, _ := core.ReadUint16LE(r)
@@ -252,59 +241,61 @@ func (o *OrderPdu) processSecondaryOrder(r io.Reader, cflags uint8) error {
 
 	return nil
 }
-func update_parse_bounds(r io.Reader) *Bounds {
-	var bounds Bounds
-
+func (b *Bounds) updateBounds(r io.Reader) {
 	present, _ := core.ReadUInt8(r)
 
 	if present&1 != 0 {
-		readOrderCoord(r, &bounds.left, false)
+		readOrderCoord(r, &b.left, false)
 	} else if present&16 != 0 {
-		readOrderCoord(r, &bounds.left, true)
+		readOrderCoord(r, &b.left, true)
 	}
 
 	if present&2 != 0 {
-		readOrderCoord(r, &bounds.top, false)
+		readOrderCoord(r, &b.top, false)
 	} else if present&32 != 0 {
-		readOrderCoord(r, &bounds.top, true)
+		readOrderCoord(r, &b.top, true)
 	}
 
 	if present&4 != 0 {
-		readOrderCoord(r, &bounds.right, false)
+		readOrderCoord(r, &b.right, false)
 	} else if present&64 != 0 {
-		readOrderCoord(r, &bounds.right, true)
+		readOrderCoord(r, &b.right, true)
 	}
 	if present&8 != 0 {
-		readOrderCoord(r, &bounds.bottom, false)
+		readOrderCoord(r, &b.bottom, false)
 	} else if present&128 != 0 {
-		readOrderCoord(r, &bounds.bottom, true)
+		readOrderCoord(r, &b.bottom, true)
 	}
-
-	return &bounds
 }
 
-var orderType uint8
+type PrimaryOrder interface {
+	Type() int
+	Unpack(io.Reader, uint32, bool) error
+}
 
-func (o *OrderPdu) processPrimaryOrder(r io.Reader, cflags uint8) error {
-	//var orderType uint8
-	if cflags&TS_TYPE_CHANGE != 0 {
-		glog.Info("ORDER_TYPE_CHANGE")
+var (
+	orderType uint8
+	bounds    Bounds
+)
+
+func (o *OrderPdu) processPrimaryOrder(r io.Reader) error {
+	o.Primary = &Primary{}
+	if o.ControlFlags&TS_TYPE_CHANGE != 0 {
 		orderType, _ = core.ReadUInt8(r)
-		glog.Infof("orderType:0x%x", orderType)
 	}
 	size := 1
 	switch orderType {
-	case ORDER_TYPE_MEM3BLT, ORDER_TYPE_GLYPHINDEX:
+	case ORDER_TYPE_MEM3BLT, ORDER_TYPE_TEXT2:
 		size = 3
 
 	case ORDER_TYPE_PATBLT, ORDER_TYPE_MEMBLT, ORDER_TYPE_LINETO, ORDER_TYPE_POLYGON_CB, ORDER_TYPE_ELLIPSE_CB:
 		size = 2
 	}
 
-	if cflags&TS_ZERO_FIELD_BYTE_BIT0 != 0 {
+	if o.ControlFlags&TS_ZERO_FIELD_BYTE_BIT0 != 0 {
 		size--
 	}
-	if cflags&TS_ZERO_FIELD_BYTE_BIT1 != 0 {
+	if o.ControlFlags&TS_ZERO_FIELD_BYTE_BIT1 != 0 {
 		if size < 2 {
 			size = 0
 		} else {
@@ -317,97 +308,97 @@ func (o *OrderPdu) processPrimaryOrder(r io.Reader, cflags uint8) error {
 		present |= uint32(bits) << (i * 8)
 	}
 
-	if cflags&TS_BOUNDS != 0 {
-		if cflags&TS_ZERO_BOUNDS_DELTAS == 0 {
-			bounds := update_parse_bounds(r)
-			glog.Debug(bounds)
+	if o.ControlFlags&TS_BOUNDS != 0 {
+		if o.ControlFlags&TS_ZERO_BOUNDS_DELTAS == 0 {
+			bounds.updateBounds(r)
 		}
-		//update ui
+		//glog.Infof("updateBounds")
+		o.Primary.Bounds = bounds
 	}
-	var p Primary
-	p.delta = cflags&TS_DELTA_COORDINATES != 0
-	p.present = present
-	o.Data = &p
 
-	glog.Info("Primary:", orderType)
+	delta := o.ControlFlags&TS_DELTA_COORDINATES != 0
 
+	//glog.Infof("present=%d,delta=%v", present, delta)
+
+	var p PrimaryOrder
 	switch orderType {
 	case ORDER_TYPE_DSTBLT:
-		p.updateReadDstbltOrder(r)
+		p = &Dstblt{}
 
 	case ORDER_TYPE_PATBLT:
-		p.updateReadPatbltOrder(r)
+		p = &Patblt{}
 
 	case ORDER_TYPE_SCRBLT:
-		p.updateReadScrbltOrder(r)
+		p = &Scrblt{}
 
-	case ORDER_TYPE_DRAWNINEGRID:
-		//p.update_read_draw_nine_grid_order(r, orderInfo)
+	//case ORDER_TYPE_DRAWNINEGRID:
 
-	case ORDER_TYPE_MULTI_DRAWNINEGRID:
-		//p.update_read_multi_draw_nine_grid_order(r, orderInfo)
+	//case ORDER_TYPE_MULTI_DRAWNINEGRID:
 
 	case ORDER_TYPE_LINETO:
-		//p.update_read_line_to_order(r, orderInfo)
+		p = &LineTo{}
 
 	case ORDER_TYPE_OPAQUERECT:
-		p.updateReadOpaqueRectOrder(r)
+		p = &OpaqueRect{}
 
 	case ORDER_TYPE_SAVEBITMAP:
-		//p.update_read_save_bitmap_order(r, orderInfo)
+		p = &SaveBitmap{}
 
 	case ORDER_TYPE_MEMBLT:
-		//p.update_read_memblt_order(r, orderInfo)
+		p = &Memblt{}
 
 	case ORDER_TYPE_MEM3BLT:
-		//p.update_read_mem3blt_order(r, orderInfo)
+		p = &Mem3blt{}
 
-	case ORDER_TYPE_MULTIDSTBLT:
-		//p.update_read_multi_dstblt_order(r, orderInfo)
+	//case ORDER_TYPE_MULTIDSTBLT:
 
-	case ORDER_TYPE_MULTIPATBLT:
-		//p.update_read_multi_patblt_order(r, orderInfo)
+	//case ORDER_TYPE_MULTIPATBLT:
 
-	case ORDER_TYPE_MULTISCRBLT:
-		//p.update_read_multi_scrblt_order(r, orderInfo)
+	//case ORDER_TYPE_MULTISCRBLT:
 
-	case ORDER_TYPE_MULTIOPAQUERECT:
-		//p.update_read_multi_opaque_rect_order(r, orderInfo)
+	//case ORDER_TYPE_MULTIOPAQUERECT:
 
-	case ORDER_TYPE_FAST_INDEX:
-		//p.update_read_fast_index_order(r, orderInfo)
+	//case ORDER_TYPE_FAST_INDEX:
 
 	case ORDER_TYPE_POLYGON_SC:
-		//p.update_read_polygon_sc_order(r, orderInfo)
+		p = &PolygonSc{}
 
 	case ORDER_TYPE_POLYGON_CB:
-		//p.update_read_polygon_cb_order(r, orderInfo)
+		p = &PolygonCb{}
 
 	case ORDER_TYPE_POLYLINE:
-		//p.update_read_polyline_order(r, orderInfo)
+		p = &Polyline{}
 
-	case ORDER_TYPE_FAST_GLYPH:
-		//p.update_read_fast_glyph_order(r, orderInfo)
+	//case ORDER_TYPE_FAST_GLYPH:
 
 	case ORDER_TYPE_ELLIPSE_SC:
-		//p.update_read_ellipse_sc_order(r, orderInfo)
+		p = &EllipeSc{}
 
 	case ORDER_TYPE_ELLIPSE_CB:
-		//p.update_read_ellipse_cb_order(r, orderInfo)
+		p = &EllipeCb{}
 
-	case ORDER_TYPE_GLYPHINDEX:
-		//p.update_read_glyph_index_order(r, orderInfo)
+	case ORDER_TYPE_TEXT2:
+		p = &GlayphIndex{}
+	default:
+		glog.Error("Not Support order type:", orderType)
+		return errors.New("Not Support order type")
+	}
+	if p != nil {
+		if err := p.Unpack(r, present, delta); err != nil {
+			return err
+		}
 	}
 
+	o.Primary.Data = p
 	return nil
 }
 func readOrderCoord(r io.Reader, coord *int32, delta bool) {
 	if delta {
 		change, _ := core.ReadUInt8(r)
-		*coord += int32(change)
+		*coord += int32(int8(change))
 	} else {
 		change, _ := core.ReadUint16LE(r)
-		*coord = int32(change)
+		*coord = int32(int16(change))
 	}
 }
 
@@ -419,24 +410,27 @@ type Dstblt struct {
 	opcode uint8
 }
 
-func (p *Primary) updateReadDstbltOrder(r io.Reader) {
+func (d *Dstblt) Type() int {
+	return ORDER_TYPE_DSTBLT
+}
+func (d *Dstblt) Unpack(r io.Reader, present uint32, delta bool) error {
 	glog.Infof("Dstblt Order")
-	var d Dstblt
-	if p.present&0x01 != 0 {
-		readOrderCoord(r, &d.x, p.delta)
+	if present&0x01 != 0 {
+		readOrderCoord(r, &d.x, delta)
 	}
-	if p.present&0x02 != 0 {
-		readOrderCoord(r, &d.y, p.delta)
+	if present&0x02 != 0 {
+		readOrderCoord(r, &d.y, delta)
 	}
-	if p.present&0x04 != 0 {
-		readOrderCoord(r, &d.cx, p.delta)
+	if present&0x04 != 0 {
+		readOrderCoord(r, &d.cx, delta)
 	}
-	if p.present&0x08 != 0 {
-		readOrderCoord(r, &d.cy, p.delta)
+	if present&0x08 != 0 {
+		readOrderCoord(r, &d.cy, delta)
 	}
-	if p.present&0x10 != 0 {
+	if present&0x10 != 0 {
 		d.opcode, _ = core.ReadUInt8(r)
 	}
+	return nil
 }
 
 type Patblt struct {
@@ -447,72 +441,73 @@ type Patblt struct {
 	opcode   uint8
 	bgcolour [4]uint8
 	fgcolour [4]uint8
-	brush    *Brush
-}
-type Brush struct {
-	x     uint8
-	y     uint8
-	bpp   uint8
-	style uint8
-	hatch uint8
-	index uint8
-	data  []byte
+	brush    Brush
 }
 
-func readOrderbrush(r io.Reader, present uint32) *Brush {
-	var b Brush
+func (d *Patblt) Type() int {
+	return ORDER_TYPE_PATBLT
+}
+func (d *Patblt) Unpack(r io.Reader, present uint32, delta bool) error {
+	glog.Infof("Patblt Order")
+	if present&0x01 != 0 {
+		readOrderCoord(r, &d.x, delta)
+	}
+	if present&0x02 != 0 {
+		readOrderCoord(r, &d.y, delta)
+	}
+	if present&0x04 != 0 {
+		readOrderCoord(r, &d.cx, delta)
+	}
+	if present&0x08 != 0 {
+		readOrderCoord(r, &d.cy, delta)
+	}
+	if present&0x10 != 0 {
+		d.opcode, _ = core.ReadUInt8(r)
+	}
+	if present&0x0020 != 0 {
+		b, g, r, a := updateReadColorRef(r)
+		d.bgcolour[0], d.bgcolour[1], d.bgcolour[2], d.bgcolour[3] = b, g, r, a
+	}
+	if present&0x0040 != 0 {
+		b, g, r, a := updateReadColorRef(r)
+		d.fgcolour[0], d.fgcolour[1], d.fgcolour[2], d.fgcolour[3] = b, g, r, a
+	}
+	d.brush.updateBrush(r, present>>7)
+
+	return nil
+}
+
+type Brush struct {
+	X     uint8
+	Y     uint8
+	Style uint8
+	Hatch uint8
+	Data  []byte
+}
+
+func (b *Brush) updateBrush(r io.Reader, present uint32) {
 	if present&1 != 0 {
-		b.x, _ = core.ReadUInt8(r)
+		b.X, _ = core.ReadUInt8(r)
 	}
 
 	if present&2 != 0 {
-		b.y, _ = core.ReadUInt8(r)
+		b.Y, _ = core.ReadUInt8(r)
 	}
 
 	if present&4 != 0 {
-		b.style, _ = core.ReadUInt8(r)
+		b.Style, _ = core.ReadUInt8(r)
 	}
 
 	if present&8 != 0 {
-		b.hatch, _ = core.ReadUInt8(r)
+		b.Hatch, _ = core.ReadUInt8(r)
 	}
 
 	if present&16 != 0 {
 		data, _ := core.ReadBytes(7, r)
-		b.data = make([]byte, 0, 8)
-		b.data = append(b.data, b.hatch)
-		b.data = append(b.data, data...)
+		b.Data = make([]byte, 0, 8)
+		b.Data = append(b.Data, b.Hatch)
+		b.Data = append(b.Data, data...)
 	}
-
-	return &b
-}
-func (p *Primary) updateReadPatbltOrder(r io.Reader) {
-	glog.Infof("Patblt Order")
-	var d Patblt
-	if p.present&0x01 != 0 {
-		readOrderCoord(r, &d.x, p.delta)
-	}
-	if p.present&0x02 != 0 {
-		readOrderCoord(r, &d.y, p.delta)
-	}
-	if p.present&0x04 != 0 {
-		readOrderCoord(r, &d.cx, p.delta)
-	}
-	if p.present&0x08 != 0 {
-		readOrderCoord(r, &d.cy, p.delta)
-	}
-	if p.present&0x10 != 0 {
-		d.opcode, _ = core.ReadUInt8(r)
-	}
-	if p.present&0x0020 != 0 {
-		b, g, r, a := updateReadColorRef(r)
-		d.bgcolour[0], d.bgcolour[1], d.bgcolour[2], d.bgcolour[3] = b, g, r, a
-	}
-	if p.present&0x0040 != 0 {
-		b, g, r, a := updateReadColorRef(r)
-		d.fgcolour[0], d.fgcolour[1], d.fgcolour[2], d.fgcolour[3] = b, g, r, a
-	}
-	d.brush = readOrderbrush(r, p.present>>7)
 }
 
 type Scrblt struct {
@@ -525,36 +520,415 @@ type Scrblt struct {
 	Srcy   int32
 }
 
-func (p *Primary) updateReadScrbltOrder(r io.Reader) {
-	glog.Infof("Scrblt Order")
-	var d Scrblt
-	if p.present&0x0001 != 0 {
-		readOrderCoord(r, &d.X, p.delta)
-	}
-	if p.present&0x0002 != 0 {
-		readOrderCoord(r, &d.Y, p.delta)
-	}
-	if p.present&0x0004 != 0 {
-		readOrderCoord(r, &d.Cx, p.delta)
-	}
-	if p.present&0x0008 != 0 {
-		readOrderCoord(r, &d.Cy, p.delta)
-	}
-	if p.present&0x0010 != 0 {
-		d.Opcode, _ = core.ReadUInt8(r)
-	}
-	if p.present&0x0020 != 0 {
-		readOrderCoord(r, &d.Srcx, p.delta)
-	}
-	if p.present&0x0040 != 0 {
-		readOrderCoord(r, &d.Srcy, p.delta)
-	}
-
-	p.Scrblt = d
+func (d *Scrblt) Type() int {
+	return ORDER_TYPE_SCRBLT
 }
 
-func (p *Primary) updateReadOpaqueRectOrder(r io.Reader) {
-	glog.Infof("Opaque Rect Order")
+var d Scrblt
+
+func (d1 *Scrblt) Unpack(r io.Reader, present uint32, delta bool) error {
+	glog.Infof("Scrblt Order")
+	if present&0x0001 != 0 {
+		readOrderCoord(r, &d.X, delta)
+	}
+	if present&0x0002 != 0 {
+		readOrderCoord(r, &d.Y, delta)
+	}
+	if present&0x0004 != 0 {
+		readOrderCoord(r, &d.Cx, delta)
+	}
+	if present&0x0008 != 0 {
+		readOrderCoord(r, &d.Cy, delta)
+	}
+	if present&0x0010 != 0 {
+		d.Opcode, _ = core.ReadUInt8(r)
+	}
+	if present&0x0020 != 0 {
+		readOrderCoord(r, &d.Srcx, delta)
+	}
+	if present&0x0040 != 0 {
+		readOrderCoord(r, &d.Srcy, delta)
+	}
+	*d1 = d
+	return nil
+}
+
+type LineTo struct {
+	Mixmode  uint16
+	Startx   int32
+	Starty   int32
+	Endx     int32
+	Endy     int32
+	Bgcolour [4]uint8
+	Opcode   uint8
+	Pen      Pen
+}
+
+func (d *LineTo) Type() int {
+	return ORDER_TYPE_LINETO
+}
+func (d *LineTo) Unpack(r io.Reader, present uint32, delta bool) error {
+	glog.Infof("LineTo Order")
+	if present&0x0001 != 0 {
+		d.Mixmode, _ = core.ReadUint16LE(r)
+	}
+	if present&0x0002 != 0 {
+		readOrderCoord(r, &d.Startx, delta)
+	}
+	if present&0x0004 != 0 {
+		readOrderCoord(r, &d.Starty, delta)
+	}
+	if present&0x008 != 0 {
+		readOrderCoord(r, &d.Endx, delta)
+	}
+	if present&0x0010 != 0 {
+		readOrderCoord(r, &d.Endy, delta)
+	}
+	if present&0x0020 != 0 {
+		b, g, r, a := updateReadColorRef(r)
+		d.Bgcolour[0], d.Bgcolour[1], d.Bgcolour[2], d.Bgcolour[3] = b, g, r, a
+	}
+	if present&0x0040 != 0 {
+		d.Opcode, _ = core.ReadUInt8(r)
+	}
+
+	d.Pen.updatePen(r, present>>7)
+
+	return nil
+}
+
+type Pen struct {
+	Style  uint8
+	Width  uint8
+	Colour [4]uint8
+}
+
+func (d *Pen) updatePen(r io.Reader, present uint32) {
+	if present&1 != 0 {
+		d.Style, _ = core.ReadUInt8(r)
+	}
+
+	if present&2 != 0 {
+		d.Width, _ = core.ReadUInt8(r)
+	}
+
+	if present&4 != 0 {
+		b, g, r, a := updateReadColorRef(r)
+		d.Colour[0], d.Colour[1], d.Colour[2], d.Colour[3] = b, g, r, a
+	}
+}
+
+type OpaqueRect struct {
+	X      int32
+	Y      int32
+	Cx     int32
+	Cy     int32
+	Colour [4]uint8
+}
+
+func (d *OpaqueRect) Type() int {
+	return ORDER_TYPE_OPAQUERECT
+}
+func (d *OpaqueRect) Unpack(r io.Reader, present uint32, delta bool) error {
+	glog.Infof("OpaqueRect Order")
+	if present&0x0001 != 0 {
+		readOrderCoord(r, &d.X, delta)
+	}
+	if present&0x0002 != 0 {
+		readOrderCoord(r, &d.Y, delta)
+	}
+	if present&0x0004 != 0 {
+		readOrderCoord(r, &d.Cx, delta)
+	}
+	if present&0x0008 != 0 {
+		readOrderCoord(r, &d.Cy, delta)
+	}
+	if present&0x0010 != 0 {
+		i, _ := core.ReadUInt8(r)
+		d.Colour[0] = i
+	}
+	if present&0x0020 != 0 {
+		i, _ := core.ReadUInt8(r)
+		d.Colour[1] = i
+	}
+	if present&0x0040 != 0 {
+		i, _ := core.ReadUInt8(r)
+		d.Colour[2] = i
+	}
+	return nil
+}
+
+type SaveBitmap struct {
+	Offset uint32
+	Left   int32
+	Top    int32
+	Right  int32
+	Bottom int32
+	action uint8
+}
+
+func (d *SaveBitmap) Type() int {
+	return ORDER_TYPE_SAVEBITMAP
+}
+func (d *SaveBitmap) Unpack(r io.Reader, present uint32, delta bool) error {
+	if present&0x0001 != 0 {
+		d.Offset, _ = core.ReadUInt32LE(r)
+	}
+	if present&0x0002 != 0 {
+		readOrderCoord(r, &d.Left, delta)
+	}
+	if present&0x0004 != 0 {
+		readOrderCoord(r, &d.Top, delta)
+	}
+	if present&0x0008 != 0 {
+		readOrderCoord(r, &d.Right, delta)
+	}
+	if present&0x0010 != 0 {
+		readOrderCoord(r, &d.Bottom, delta)
+	}
+	if present&0x0020 != 0 {
+		d.action, _ = core.ReadUInt8(r)
+	}
+	return nil
+}
+
+type Memblt struct {
+	ColourTable uint8
+	CacheId     uint8
+	X           int32
+	Y           int32
+	Cx          int32
+	Cy          int32
+	Opcode      uint8
+	Srcx        int32
+	Srcy        int32
+	CacheIdx    uint16
+}
+
+func (d *Memblt) Type() int {
+	return ORDER_TYPE_MEMBLT
+}
+func (d *Memblt) Unpack(r io.Reader, present uint32, delta bool) error {
+	if present&0x0001 != 0 {
+		d.CacheId, _ = core.ReadUInt8(r)
+		d.ColourTable, _ = core.ReadUInt8(r)
+	}
+	if present&0x0002 != 0 {
+		readOrderCoord(r, &d.X, delta)
+	}
+	if present&0x0004 != 0 {
+		readOrderCoord(r, &d.Y, delta)
+	}
+	if present&0x0008 != 0 {
+		readOrderCoord(r, &d.Cx, delta)
+	}
+	if present&0x0010 != 0 {
+		readOrderCoord(r, &d.Cy, delta)
+	}
+	if present&0x0020 != 0 {
+		d.Opcode, _ = core.ReadUInt8(r)
+	}
+	if present&0x0040 != 0 {
+		readOrderCoord(r, &d.Srcx, delta)
+	}
+	if present&0x0080 != 0 {
+		readOrderCoord(r, &d.Srcy, delta)
+	}
+	if present&0x0100 != 0 {
+		d.CacheIdx, _ = core.ReadUint16LE(r)
+	}
+	return nil
+}
+
+type Mem3blt struct {
+	ColourTable uint8
+	CacheId     uint8
+	X           int32
+	Y           int32
+	Cx          int32
+	Cy          int32
+	Opcode      uint8
+	Srcx        int32
+	Srcy        int32
+	Bgcolour    [4]uint8
+	Fgcolour    [4]uint8
+	Brush       Brush
+	CacheIdx    uint16
+}
+
+func (d *Mem3blt) Type() int {
+	return ORDER_TYPE_MEM3BLT
+}
+func (d *Mem3blt) Unpack(r io.Reader, present uint32, delta bool) error {
+	if present&0x000001 != 0 {
+		d.CacheId, _ = core.ReadUInt8(r)
+		d.ColourTable, _ = core.ReadUInt8(r)
+	}
+	if present&0x000002 != 0 {
+		readOrderCoord(r, &d.X, delta)
+	}
+	if present&0x000004 != 0 {
+		readOrderCoord(r, &d.Y, delta)
+	}
+	if present&0x000008 != 0 {
+		readOrderCoord(r, &d.Cx, delta)
+	}
+	if present&0x000010 != 0 {
+		readOrderCoord(r, &d.Cy, delta)
+	}
+	if present&0x000020 != 0 {
+		d.Opcode, _ = core.ReadUInt8(r)
+	}
+	if present&0x000040 != 0 {
+		readOrderCoord(r, &d.Srcx, delta)
+	}
+	if present&0x000080 != 0 {
+		readOrderCoord(r, &d.Srcy, delta)
+	}
+	if present&0x000100 != 0 {
+		b, g, r, a := updateReadColorRef(r)
+		d.Bgcolour[0], d.Bgcolour[1], d.Bgcolour[2], d.Bgcolour[3] = b, g, r, a
+	}
+	if present&0x000200 != 0 {
+		b, g, r, a := updateReadColorRef(r)
+		d.Fgcolour[0], d.Fgcolour[1], d.Fgcolour[2], d.Fgcolour[3] = b, g, r, a
+	}
+	d.Brush.updateBrush(r, present>>10)
+	if present&0x008000 != 0 {
+		d.CacheIdx, _ = core.ReadUint16LE(r)
+	}
+	if present&0x010000 != 0 {
+		core.ReadUint16LE(r)
+	}
+
+	return nil
+}
+
+type PolygonSc struct {
+	X        int32
+	Y        int32
+	Opcode   uint8
+	Fillmode uint8
+	Fgcolour [4]uint8
+	Npoints  uint8
+	Points   []Point
+}
+
+type Point struct {
+	X int32
+	Y int32
+}
+
+func (d *PolygonSc) Type() int {
+	return ORDER_TYPE_POLYGON_SC
+}
+func (d *PolygonSc) Unpack(r io.Reader, present uint32, delta bool) error {
+	if present&0x0001 != 0 {
+		readOrderCoord(r, &d.X, delta)
+	}
+	if present&0x0002 != 0 {
+		readOrderCoord(r, &d.Y, delta)
+	}
+	if present&0x0004 != 0 {
+		d.Opcode, _ = core.ReadUInt8(r)
+	}
+	if present&0x0008 != 0 {
+		d.Fillmode, _ = core.ReadUInt8(r)
+	}
+	if present&0x0010 != 0 {
+		b, g, r, a := updateReadColorRef(r)
+		d.Fgcolour[0], d.Fgcolour[1], d.Fgcolour[2], d.Fgcolour[3] = b, g, r, a
+	}
+	if present&0x0020 != 0 {
+		d.Npoints, _ = core.ReadUInt8(r)
+		d.Points = make([]Point, 0, d.Npoints+1)
+	}
+	if present&0x0040 != 0 {
+		size, _ := core.ReadUInt8(r)
+		data, _ := core.ReadBytes(int(size), r)
+		d.Points = append(d.Points, Point{d.X, d.Y})
+		var flags uint8
+		r = bytes.NewReader(data)
+		for i := 1; i <= int(d.Npoints); i++ {
+			var p Point
+			if (i-1)%4 == 0 {
+				flags, _ = core.ReadUInt8(r)
+			}
+			if (^flags)&0x80 != 0 {
+				p.X = parseDelta(r)
+			}
+			if (^flags)&0x40 != 0 {
+				p.Y = parseDelta(r)
+			}
+			flags <<= 2
+		}
+	}
+
+	return nil
+}
+
+func parseDelta(r io.Reader) (v int32) {
+	b, _ := core.ReadUInt8(r)
+	if b&0x40 != 0 {
+		v = int32(b) | (^0x3F)
+	} else {
+		v = int32(b & 0x3F)
+	}
+	if b&0x80 != 0 {
+		b, _ := core.ReadUInt8(r)
+		v = (v << 8) | int32(b)
+	}
+	return
+}
+
+type PolygonCb struct {
+}
+
+func (d *PolygonCb) Type() int {
+	return ORDER_TYPE_POLYGON_CB
+}
+func (d *PolygonCb) Unpack(r io.Reader, present uint32, delta bool) error {
+	return nil
+}
+
+type Polyline struct {
+}
+
+func (d *Polyline) Type() int {
+	return ORDER_TYPE_POLYLINE
+}
+func (d *Polyline) Unpack(r io.Reader, present uint32, delta bool) error {
+	return nil
+}
+
+type EllipeSc struct {
+}
+
+func (d *EllipeSc) Type() int {
+	return ORDER_TYPE_ELLIPSE_SC
+}
+func (d *EllipeSc) Unpack(r io.Reader, present uint32, delta bool) error {
+	return nil
+}
+
+type EllipeCb struct {
+}
+
+func (d *EllipeCb) Type() int {
+	return ORDER_TYPE_ELLIPSE_CB
+}
+func (d *EllipeCb) Unpack(r io.Reader, present uint32, delta bool) error {
+	return nil
+}
+
+type GlayphIndex struct {
+}
+
+func (d *GlayphIndex) Type() int {
+	return ORDER_TYPE_TEXT2
+}
+func (d *GlayphIndex) Unpack(r io.Reader, present uint32, delta bool) error {
+	return nil
 }
 
 /*Secondary*/
@@ -735,13 +1109,13 @@ func (s *Secondary) updateCacheColorTableOrder(r io.Reader, flags uint16) {
 		cb.colorTable[i], cb.colorTable[i+1], cb.colorTable[i+2], cb.colorTable[i+3] = updateReadColorRef(r)
 	}
 }
-func updateReadColorRef(r0 io.Reader) (uint8, uint8, uint8, uint8) {
-	b, _ := core.ReadUInt8(r0)
-	g, _ := core.ReadUInt8(r0)
-	r, _ := core.ReadUInt8(r0)
-	core.ReadUInt8(r0)
+func updateReadColorRef(r io.Reader) (uint8, uint8, uint8, uint8) {
+	blue, _ := core.ReadUInt8(r)
+	green, _ := core.ReadUInt8(r)
+	red, _ := core.ReadUInt8(r)
+	core.ReadUInt8(r)
 
-	return b, g, r, 255
+	return blue, green, red, 255
 }
 
 type CacheGlyphOrder struct {

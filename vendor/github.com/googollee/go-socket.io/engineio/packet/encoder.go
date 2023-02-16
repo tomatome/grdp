@@ -3,41 +3,33 @@ package packet
 import (
 	"io"
 
-	"github.com/googollee/go-socket.io/engineio/frame"
+	"github.com/googollee/go-socket.io/engineio/base"
 )
 
-// FrameWriter is the writer which supports framing.
-type FrameWriter interface {
-	NextWriter(typ frame.Type) (io.WriteCloser, error)
-}
-
-type Encoder struct {
+type encoder struct {
 	w FrameWriter
 }
 
-func NewEncoder(w FrameWriter) *Encoder {
-	return &Encoder{
+func newEncoder(w FrameWriter) *encoder {
+	return &encoder{
 		w: w,
 	}
 }
 
-func (e *Encoder) NextWriter(ft frame.Type, pt Type) (io.WriteCloser, error) {
+func (e *encoder) NextWriter(ft base.FrameType, pt base.PacketType) (io.WriteCloser, error) {
 	w, err := e.w.NextWriter(ft)
 	if err != nil {
 		return nil, err
 	}
-
 	var b [1]byte
-	if ft == frame.String {
+	if ft == base.FrameString {
 		b[0] = pt.StringByte()
 	} else {
 		b[0] = pt.BinaryByte()
 	}
-
 	if _, err := w.Write(b[:]); err != nil {
 		w.Close()
 		return nil, err
 	}
-
 	return w, nil
 }

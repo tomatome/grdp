@@ -3,335 +3,179 @@ package socketio
 import (
 	"net/http"
 
-	"github.com/gomodule/redigo/redis"
-
-	"github.com/googollee/go-socket.io/engineio"
-	"github.com/googollee/go-socket.io/parser"
+	engineio "github.com/googollee/go-socket.io/engineio"
 )
 
 // Server is a go-socket.io server.
 type Server struct {
-	engine *engineio.Server
-
-	handlers *namespaceHandlers
-
-	redisAdapter *RedisAdapterOptions
+	handlers map[string]*namespaceHandler
+	eio      *engineio.Server
 }
 
 // NewServer returns a server.
-func NewServer(opts *engineio.Options) *Server {
-	return &Server{
-		handlers: newNamespaceHandlers(),
-		engine:   engineio.NewServer(opts),
-	}
-}
-
-// Adapter sets redis broadcast adapter.
-func (s *Server) Adapter(opts *RedisAdapterOptions) (bool, error) {
-	opts = getOptions(opts)
-	var redisOpts []redis.DialOption
-	if len(opts.Password) > 0 {
-		redisOpts = append(redisOpts, redis.DialPassword(opts.Password))
-	}
-
-	conn, err := redis.Dial(opts.Network, opts.getAddr(), redisOpts...)
+func NewServer(c *engineio.Options) (*Server, error) {
+	eio, err := engineio.NewServer(c)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-
-	s.redisAdapter = opts
-
-	conn.Close()
-	return true, nil
+	return &Server{
+		handlers: make(map[string]*namespaceHandler),
+		eio:      eio,
+	}, nil
 }
 
 // Close closes server.
 func (s *Server) Close() error {
-	return s.engine.Close()
+	return s.eio.Close()
 }
 
-// ServeHTTP dispatches the request to the handler whose pattern most closely matches the request URL.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.engine.ServeHTTP(w, r)
+	s.eio.ServeHTTP(w, r)
 }
 
-// OnConnect set a handler function f to handle open event for namespace.
-func (s *Server) OnConnect(namespace string, f func(Conn) error) {
-	h := s.getNamespace(namespace)
-	if h == nil {
-		h = s.createNamespace(namespace)
-	}
-
+// OnConnect set a handler function f to handle open event for
+// namespace nsp.
+func (s *Server) OnConnect(nsp string, f func(Conn) error) {
+	h := s.getNamespace(nsp, true)
 	h.OnConnect(f)
 }
 
-// OnDisconnect set a handler function f to handle disconnect event for namespace.
-func (s *Server) OnDisconnect(namespace string, f func(Conn, string)) {
-	h := s.getNamespace(namespace)
-	if h == nil {
-		h = s.createNamespace(namespace)
-	}
-
+// OnDisconnect set a handler function f to handle disconnect event for
+// namespace nsp.
+func (s *Server) OnDisconnect(nsp string, f func(Conn, string)) {
+	h := s.getNamespace(nsp, true)
 	h.OnDisconnect(f)
 }
 
-// OnError set a handler function f to handle error for namespace.
-func (s *Server) OnError(namespace string, f func(Conn, error)) {
-	h := s.getNamespace(namespace)
-	if h == nil {
-		h = s.createNamespace(namespace)
-	}
-
+// OnError set a handler function f to handle error for namespace nsp.
+func (s *Server) OnError(nsp string, f func(Conn, error)) {
+	h := s.getNamespace(nsp, true)
 	h.OnError(f)
 }
 
-// OnEvent set a handler function f to handle event for namespace.
-func (s *Server) OnEvent(namespace, event string, f interface{}) {
-	h := s.getNamespace(namespace)
-	if h == nil {
-		h = s.createNamespace(namespace)
-	}
-
+// OnEvent set a handler function f to handle event for namespace nsp.
+func (s *Server) OnEvent(nsp, event string, f interface{}) {
+	h := s.getNamespace(nsp, true)
 	h.OnEvent(event, f)
 }
 
-// Serve serves go-socket.io server.
+// Serve serves go-socket.io server
 func (s *Server) Serve() error {
 	for {
-		conn, err := s.engine.Accept()
-		//todo maybe need check EOF from Accept()
+		conn, err := s.eio.Accept()
 		if err != nil {
 			return err
 		}
-
 		go s.serveConn(conn)
 	}
 }
 
-// JoinRoom joins given connection to the room.
+// JoinRoom joins given connection to the room
 func (s *Server) JoinRoom(namespace string, room string, connection Conn) bool {
-	nspHandler := s.getNamespace(namespace)
+	nspHandler := s.getNamespace(namespace, false)
 	if nspHandler != nil {
 		nspHandler.broadcast.Join(room, connection)
 		return true
 	}
-
 	return false
 }
 
-// LeaveRoom leaves given connection from the room.
+// LeaveRoom leaves given connection from the room
 func (s *Server) LeaveRoom(namespace string, room string, connection Conn) bool {
-	nspHandler := s.getNamespace(namespace)
+	nspHandler := s.getNamespace(namespace, false)
 	if nspHandler != nil {
 		nspHandler.broadcast.Leave(room, connection)
 		return true
 	}
-
 	return false
 }
 
-// LeaveAllRooms leaves the given connection from all rooms.
+// LeaveAllRooms leaves the given connection from all rooms
 func (s *Server) LeaveAllRooms(namespace string, connection Conn) bool {
-	nspHandler := s.getNamespace(namespace)
+	nspHandler := s.getNamespace(namespace, false)
 	if nspHandler != nil {
 		nspHandler.broadcast.LeaveAll(connection)
 		return true
 	}
-
 	return false
 }
 
-// ClearRoom clears the room.
+// ClearRoom clears the room
 func (s *Server) ClearRoom(namespace string, room string) bool {
-	nspHandler := s.getNamespace(namespace)
+	nspHandler := s.getNamespace(namespace, false)
 	if nspHandler != nil {
 		nspHandler.broadcast.Clear(room)
 		return true
 	}
-
 	return false
 }
 
-// BroadcastToRoom broadcasts given event & args to all the connections in the room.
+// BroadcastToRoom broadcasts given event & args to all the connections in the room
 func (s *Server) BroadcastToRoom(namespace string, room, event string, args ...interface{}) bool {
-	nspHandler := s.getNamespace(namespace)
+	nspHandler := s.getNamespace(namespace, false)
 	if nspHandler != nil {
 		nspHandler.broadcast.Send(room, event, args...)
 		return true
 	}
-
 	return false
 }
 
-// BroadcastToNamespace broadcasts given event & args to all the connections in the same namespace.
-func (s *Server) BroadcastToNamespace(namespace string, event string, args ...interface{}) bool {
-	nspHandler := s.getNamespace(namespace)
-	if nspHandler != nil {
-		nspHandler.broadcast.SendAll(event, args...)
-		return true
-	}
-
-	return false
-}
-
-// RoomLen gives number of connections in the room.
+// RoomLen gives number of connections in the room
 func (s *Server) RoomLen(namespace string, room string) int {
-	nspHandler := s.getNamespace(namespace)
+	nspHandler := s.getNamespace(namespace, false)
 	if nspHandler != nil {
 		return nspHandler.broadcast.Len(room)
 	}
-
 	return -1
 }
 
-// Rooms gives list of all the rooms.
+// Rooms gives list of all the rooms
 func (s *Server) Rooms(namespace string) []string {
-	nspHandler := s.getNamespace(namespace)
+	nspHandler := s.getNamespace(namespace, false)
 	if nspHandler != nil {
 		return nspHandler.broadcast.Rooms(nil)
 	}
-
 	return nil
 }
 
-// Count number of connections.
+// Count number of connections
 func (s *Server) Count() int {
-	return s.engine.Count()
+	return s.eio.Count()
 }
 
-// ForEach sends data by DataFunc, if room does not exit sends anything.
 func (s *Server) ForEach(namespace string, room string, f EachFunc) bool {
-	nspHandler := s.getNamespace(namespace)
+	nspHandler := s.getNamespace(namespace, false)
 	if nspHandler != nil {
 		nspHandler.broadcast.ForEach(room, f)
 		return true
 	}
-
 	return false
 }
 
-func (s *Server) serveConn(conn engineio.Conn) {
-	c := newConn(conn, s.handlers)
-	if err := c.connect(); err != nil {
-		_ = c.Close()
-		if root, ok := s.handlers.Get(rootNamespace); ok && root.onError != nil {
+func (s *Server) serveConn(c engineio.Conn) {
+	_, err := newConn(c, s.handlers)
+	if err != nil {
+		root := s.handlers[""]
+		if root != nil && root.onError != nil {
 			root.onError(nil, err)
 		}
-
 		return
 	}
-
-	go s.serveError(c)
-	go s.serveWrite(c)
-	go s.serveRead(c)
 }
 
-func (s *Server) serveError(c *conn) {
-	defer func() {
-		c.Close()
-		s.engine.Remove(c.ID())
-	}()
-
-	for {
-		select {
-		case <-c.quitChan:
-			return
-		case err := <-c.errorChan:
-			errMsg, ok := err.(errorMessage)
-			if !ok {
-				continue
-			}
-
-			if handler := c.namespace(errMsg.namespace); handler != nil {
-				if handler.onError != nil {
-					nsConn, ok := c.namespaces.Get(errMsg.namespace)
-					if !ok {
-						continue
-					}
-					handler.onError(nsConn, errMsg.err)
-				}
-			}
-		}
+func (s *Server) getNamespace(nsp string, create bool) *namespaceHandler {
+	if nsp == "/" {
+		nsp = ""
 	}
-}
-
-func (s *Server) serveWrite(c *conn) {
-	defer func() {
-		c.Close()
-		s.engine.Remove(c.ID())
-	}()
-
-	for {
-		select {
-		case <-c.quitChan:
-			return
-		case pkg := <-c.writeChan:
-			if err := c.encoder.Encode(pkg.Header, pkg.Data); err != nil {
-				c.onError(pkg.Header.Namespace, err)
-			}
-		}
+	ret, ok := s.handlers[nsp]
+	if ok {
+		return ret
 	}
-}
-
-func (s *Server) serveRead(c *conn) {
-	defer func() {
-		c.Close()
-		s.engine.Remove(c.ID())
-	}()
-
-	var event string
-
-	for {
-		var header parser.Header
-
-		if err := c.decoder.DecodeHeader(&header, &event); err != nil {
-			c.onError(rootNamespace, err)
-			return
-		}
-
-		if header.Namespace == aliasRootNamespace {
-			header.Namespace = rootNamespace
-		}
-
-		var err error
-		switch header.Type {
-		case parser.Ack, parser.Connect, parser.Disconnect:
-			handler, ok := readHandlerMapping[header.Type]
-			if !ok {
-				return
-			}
-
-			err = handler(c, header)
-		case parser.Event:
-			err = eventPacketHandler(c, event, header)
-		}
-
-		if err != nil {
-			return
-		}
-	}
-}
-
-func (s *Server) createNamespace(nsp string) *namespaceHandler {
-	if nsp == aliasRootNamespace {
-		nsp = rootNamespace
-	}
-
-	handler := newNamespaceHandler(nsp, s.redisAdapter)
-	s.handlers.Set(nsp, handler)
-
-	return handler
-}
-
-func (s *Server) getNamespace(nsp string) *namespaceHandler {
-	if nsp == aliasRootNamespace {
-		nsp = rootNamespace
-	}
-
-	ret, ok := s.handlers.Get(nsp)
-	if !ok {
+	if create {
+		handler := newHandler()
+		s.handlers[nsp] = handler
+		return handler
+	} else {
 		return nil
 	}
-
-	return ret
 }

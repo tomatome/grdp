@@ -11,16 +11,10 @@ github.com/go-gl/glfw/v3.3/glfw/glfw/deps/mingw
 github.com/go-gl/glfw/v3.3/glfw/glfw/deps/vs2008
 github.com/go-gl/glfw/v3.3/glfw/glfw/include/GLFW
 github.com/go-gl/glfw/v3.3/glfw/glfw/src
-# github.com/gofrs/uuid v4.0.0+incompatible
-## explicit
-github.com/gofrs/uuid
 # github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 ## explicit
 github.com/golang/freetype/raster
 github.com/golang/freetype/truetype
-# github.com/gomodule/redigo v1.8.4
-## explicit; go 1.14
-github.com/gomodule/redigo/redis
 # github.com/google/gxui v0.0.0-20151028112939-f85e0a97b3a4
 ## explicit
 github.com/google/gxui
@@ -37,17 +31,15 @@ github.com/google/gxui/samples/flags
 github.com/google/gxui/themes/basic
 github.com/google/gxui/themes/dark
 github.com/google/gxui/themes/light
-# github.com/googollee/go-socket.io v1.6.2
-## explicit; go 1.16
+# github.com/googollee/go-socket.io v1.4.4
+## explicit; go 1.13
 github.com/googollee/go-socket.io
 github.com/googollee/go-socket.io/engineio
-github.com/googollee/go-socket.io/engineio/frame
+github.com/googollee/go-socket.io/engineio/base
 github.com/googollee/go-socket.io/engineio/packet
 github.com/googollee/go-socket.io/engineio/payload
-github.com/googollee/go-socket.io/engineio/session
 github.com/googollee/go-socket.io/engineio/transport
 github.com/googollee/go-socket.io/engineio/transport/polling
-github.com/googollee/go-socket.io/engineio/transport/utils
 github.com/googollee/go-socket.io/engineio/transport/websocket
 github.com/googollee/go-socket.io/parser
 # github.com/gopherjs/gopherjs v1.17.2
@@ -82,6 +74,8 @@ github.com/lunixbochs/struc
 # github.com/shirou/w32 v0.0.0-20160930032740-bb4de0191aa4
 ## explicit
 github.com/shirou/w32
+# github.com/stretchr/testify v1.5.1
+## explicit; go 1.13
 # github.com/tomatome/win v0.3.1
 ## explicit
 github.com/tomatome/win

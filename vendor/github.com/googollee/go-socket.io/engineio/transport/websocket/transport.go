@@ -7,32 +7,28 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/googollee/go-socket.io/engineio/base"
 
-	"github.com/googollee/go-socket.io/engineio/transport"
-	"github.com/googollee/go-socket.io/engineio/transport/utils"
+	"github.com/gorilla/websocket"
 )
 
 // DialError is the error when dialing to a server. It saves Response from
 // server.
 type DialError struct {
-	Response *http.Response
-
 	error
+	Response *http.Response
 }
 
 // Transport is websocket transport.
 type Transport struct {
-	ReadBufferSize  int
-	WriteBufferSize int
-
-	Subprotocols     []string
+	ReadBufferSize   int
+	WriteBufferSize  int
+	NetDial          func(network, addr string) (net.Conn, error)
+	Proxy            func(*http.Request) (*url.URL, error)
 	TLSClientConfig  *tls.Config
 	HandshakeTimeout time.Duration
-
-	Proxy       func(*http.Request) (*url.URL, error)
-	NetDial     func(network, addr string) (net.Conn, error)
-	CheckOrigin func(r *http.Request) bool
+	Subprotocols     []string
+	CheckOrigin      func(r *http.Request) bool
 }
 
 // Default is default transport.
@@ -44,7 +40,7 @@ func (t *Transport) Name() string {
 }
 
 // Dial creates a new client connection.
-func (t *Transport) Dial(u *url.URL, requestHeader http.Header) (transport.Conn, error) {
+func (t *Transport) Dial(u *url.URL, requestHeader http.Header) (base.Conn, error) {
 	dialer := websocket.Dialer{
 		ReadBufferSize:   t.ReadBufferSize,
 		WriteBufferSize:  t.WriteBufferSize,
@@ -54,18 +50,15 @@ func (t *Transport) Dial(u *url.URL, requestHeader http.Header) (transport.Conn,
 		HandshakeTimeout: t.HandshakeTimeout,
 		Subprotocols:     t.Subprotocols,
 	}
-
 	switch u.Scheme {
 	case "http":
 		u.Scheme = "ws"
 	case "https":
 		u.Scheme = "wss"
 	}
-
 	query := u.Query()
 	query.Set("transport", t.Name())
-	query.Set("t", utils.Timestamp())
-
+	query.Set("t", base.Timestamp())
 	u.RawQuery = query.Encode()
 	c, resp, err := dialer.Dial(u.String(), requestHeader)
 	if err != nil {
@@ -79,7 +72,7 @@ func (t *Transport) Dial(u *url.URL, requestHeader http.Header) (transport.Conn,
 }
 
 // Accept accepts a http request and create Conn.
-func (t *Transport) Accept(w http.ResponseWriter, r *http.Request) (transport.Conn, error) {
+func (t *Transport) Accept(w http.ResponseWriter, r *http.Request) (base.Conn, error) {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  t.ReadBufferSize,
 		WriteBufferSize: t.WriteBufferSize,

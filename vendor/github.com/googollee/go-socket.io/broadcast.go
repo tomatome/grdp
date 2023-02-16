@@ -2,7 +2,6 @@ package socketio
 
 import "sync"
 
-// EachFunc typed for each callback function
 type EachFunc func(Conn)
 
 // Broadcast is the adaptor to handle broadcasts & rooms for socket.io server API
@@ -13,103 +12,119 @@ type Broadcast interface {
 	Clear(room string)                            // Clear causes removal of all connections from the room
 	Send(room, event string, args ...interface{}) // Send will send an event with args to the room
 	SendAll(event string, args ...interface{})    // SendAll will send an event with args to all the rooms
-	ForEach(room string, f EachFunc)              // ForEach sends data by DataFunc, if room does not exits sends nothing
-	Len(room string) int                          // Len gives number of connections in the room
-	Rooms(connection Conn) []string               // Gives list of all the rooms if no connection given, else list of all the rooms the connection joined
-	AllRooms() []string                           // Gives list of all the rooms the connection joined
+	ForEach(room string, f EachFunc)
+	Len(room string) int            // Len gives number of connections in the room
+	Rooms(connection Conn) []string // Gives list of all the rooms if no connection given, else list of all the rooms the connection joined
 }
 
 // broadcast gives Join, Leave & BroadcastTO server API support to socket.io along with room management
-// map of rooms where each room contains a map of connection id to connections in that room
 type broadcast struct {
-	rooms map[string]map[string]Conn
-
-	lock sync.RWMutex
+	rooms map[string]map[string]Conn // map of rooms where each room contains a map of connection id to connections in that room
+	lock  sync.RWMutex               // access lock for rooms
 }
 
-// newBroadcast creates a new broadcast adapter
-func newBroadcast() *broadcast {
-	return &broadcast{
-		rooms: make(map[string]map[string]Conn),
-	}
+// NewBroadcast creates a new broadcast adapter
+func NewBroadcast() *broadcast {
+	return &broadcast{rooms: make(map[string]map[string]Conn)}
 }
 
 // Join joins the given connection to the broadcast room
-func (bc *broadcast) Join(room string, connection Conn) {
-	bc.lock.Lock()
-	defer bc.lock.Unlock()
+func (broadcast *broadcast) Join(room string, connection Conn) {
+	// get write lock
+	broadcast.lock.Lock()
+	defer broadcast.lock.Unlock()
 
-	if _, ok := bc.rooms[room]; !ok {
-		bc.rooms[room] = make(map[string]Conn)
+	// check if room already has connection mappings, if not then create one
+	if _, ok := broadcast.rooms[room]; !ok {
+		broadcast.rooms[room] = make(map[string]Conn)
 	}
 
-	bc.rooms[room][connection.ID()] = connection
+	// add the connection to the rooms connection map
+	broadcast.rooms[room][connection.ID()] = connection
 }
 
 // Leave leaves the given connection from given room (if exist)
-func (bc *broadcast) Leave(room string, connection Conn) {
-	bc.lock.Lock()
-	defer bc.lock.Unlock()
+func (broadcast *broadcast) Leave(room string, connection Conn) {
+	// get write lock
+	broadcast.lock.Lock()
+	defer broadcast.lock.Unlock()
 
-	if connections, ok := bc.rooms[room]; ok {
+	// check if rooms connection
+	if connections, ok := broadcast.rooms[room]; ok {
+		// remove the connection from the room
 		delete(connections, connection.ID())
 
+		// check if no more connection is left to the room, then delete the room
 		if len(connections) == 0 {
-			delete(bc.rooms, room)
+			delete(broadcast.rooms, room)
 		}
 	}
 }
 
 // LeaveAll leaves the given connection from all rooms
-func (bc *broadcast) LeaveAll(connection Conn) {
-	bc.lock.Lock()
-	defer bc.lock.Unlock()
+func (broadcast *broadcast) LeaveAll(connection Conn) {
+	// get write lock
+	broadcast.lock.Lock()
+	defer broadcast.lock.Unlock()
 
-	for room, connections := range bc.rooms {
+	// iterate through each room
+	for room, connections := range broadcast.rooms {
+		// remove the connection from the rooms connections
 		delete(connections, connection.ID())
 
+		// check if no more connection is left to the room, then delete the room
 		if len(connections) == 0 {
-			delete(bc.rooms, room)
+			delete(broadcast.rooms, room)
 		}
 	}
 }
 
 // Clear clears the room
-func (bc *broadcast) Clear(room string) {
-	bc.lock.Lock()
-	defer bc.lock.Unlock()
+func (broadcast *broadcast) Clear(room string) {
+	// get write lock
+	broadcast.lock.Lock()
+	defer broadcast.lock.Unlock()
 
-	delete(bc.rooms, room)
+	// delete the room
+	delete(broadcast.rooms, room)
 }
 
 // Send sends given event & args to all the connections in the specified room
-func (bc *broadcast) Send(room, event string, args ...interface{}) {
-	bc.lock.RLock()
-	defer bc.lock.RUnlock()
+func (broadcast *broadcast) Send(room, event string, args ...interface{}) {
+	// get a read lock
+	broadcast.lock.RLock()
+	defer broadcast.lock.RUnlock()
 
-	for _, connection := range bc.rooms[room] {
+	// iterate through each connection in the room
+	for _, connection := range broadcast.rooms[room] {
+		// emit the event to the connection
 		connection.Emit(event, args...)
 	}
 }
 
 // SendAll sends given event & args to all the connections to all the rooms
-func (bc *broadcast) SendAll(event string, args ...interface{}) {
-	bc.lock.RLock()
-	defer bc.lock.RUnlock()
+func (broadcast *broadcast) SendAll(event string, args ...interface{}) {
+	// get a read lock
+	broadcast.lock.RLock()
+	defer broadcast.lock.RUnlock()
 
-	for _, connections := range bc.rooms {
+	// iterate through each room
+	for _, connections := range broadcast.rooms {
+		// iterate through each connection in the room
 		for _, connection := range connections {
+			// emit the event to the connection
 			connection.Emit(event, args...)
 		}
 	}
 }
 
-// ForEach sends data returned by DataFunc, if room does not exits sends nothing
-func (bc *broadcast) ForEach(room string, f EachFunc) {
-	bc.lock.RLock()
-	defer bc.lock.RUnlock()
+// SendForEach sends data returned by DataFunc, if the return is 'ok' (second return)
+func (broadcast *broadcast) ForEach(room string, f EachFunc) {
+	// get a read lock
+	broadcast.lock.RLock()
+	defer broadcast.lock.RUnlock()
 
-	occupants, ok := bc.rooms[room]
+	occupants, ok := broadcast.rooms[room]
 	if !ok {
 		return
 	}
@@ -120,48 +135,35 @@ func (bc *broadcast) ForEach(room string, f EachFunc) {
 }
 
 // Len gives number of connections in the room
-func (bc *broadcast) Len(room string) int {
-	bc.lock.RLock()
-	defer bc.lock.RUnlock()
+func (broadcast *broadcast) Len(room string) int {
+	broadcast.lock.RLock()
+	defer broadcast.lock.RUnlock()
 
-	return len(bc.rooms[room])
+	return len(broadcast.rooms[room])
 }
 
 // Rooms gives the list of all the rooms available for broadcast in case of
 // no connection is given, in case of a connection is given, it gives
 // list of all the rooms the connection is joined to
-func (bc *broadcast) Rooms(connection Conn) []string {
-	bc.lock.RLock()
-	defer bc.lock.RUnlock()
+func (broadcast *broadcast) Rooms(connection Conn) []string {
+	broadcast.lock.RLock()
+	defer broadcast.lock.RUnlock()
 
-	if connection == nil {
-		return bc.AllRooms()
-	}
-
-	return bc.getRoomsByConn(connection)
-}
-
-// AllRooms gives list of all rooms available for broadcast
-func (bc *broadcast) AllRooms() []string {
-	bc.lock.RLock()
-	defer bc.lock.RUnlock()
-
-	rooms := make([]string, 0, len(bc.rooms))
-	for room := range bc.rooms {
-		rooms = append(rooms, room)
-	}
-
-	return rooms
-}
-
-func (bc *broadcast) getRoomsByConn(connection Conn) []string {
-	var rooms []string
-
-	for room, connections := range bc.rooms {
-		if _, ok := connections[connection.ID()]; ok {
+	rooms := make([]string, 0)
+	if connection == nil { // create a new list of all the room names
+		// iterate through the rooms map and add the room name to the above list
+		for room := range broadcast.rooms {
 			rooms = append(rooms, room)
 		}
+	} else { // create a new list of all the room names the connection is joined to
+		// iterate through the rooms map and add the room name to the above list
+		for room, connections := range broadcast.rooms {
+			// check if the connection is joined to the room
+			if _, ok := connections[connection.ID()]; ok {
+				// add the room name to the list
+				rooms = append(rooms, room)
+			}
+		}
 	}
-
 	return rooms
 }

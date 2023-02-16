@@ -27,7 +27,7 @@ func showPreview(w http.ResponseWriter, r *http.Request) {
 }
 
 func socketIO() {
-	server := socketio.NewServer(nil)
+	server, _ := socketio.NewServer(nil)
 	server.OnConnect("/", func(so socketio.Conn) error {
 		fmt.Println("OnConnect", so.ID())
 		so.Emit("rdp-connect", true)
@@ -60,7 +60,7 @@ func socketIO() {
 			fmt.Println("on success")
 		}).On("ready", func() {
 			fmt.Println("on ready")
-		}).On("update", func(rectangles []pdu.BitmapData) {
+		}).On("bitmap", func(rectangles []pdu.BitmapData) {
 			glog.Info(time.Now(), "on update Bitmap:", len(rectangles))
 			bs := make([]Bitmap, 0, len(rectangles))
 			for _, v := range rectangles {
