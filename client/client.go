@@ -33,6 +33,12 @@ type Control interface {
 	Close()
 }
 
+func init() {
+	glog.SetLevel(glog.INFO)
+	logger := log.New(os.Stdout, "", 0)
+	glog.SetLogger(logger)
+}
+
 type Client struct {
 	host    string
 	user    string
@@ -42,11 +48,6 @@ type Client struct {
 	setting *Setting
 }
 
-func init() {
-	glog.SetLevel(glog.INFO)
-	logger := log.New(os.Stdout, "", 0)
-	glog.SetLogger(logger)
-}
 func NewClient(host, user, passwd string, t int, s *Setting) *Client {
 	if s == nil {
 		s = NewSetting()

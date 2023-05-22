@@ -2,8 +2,13 @@ package gcc
 
 import (
 	"bytes"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"errors"
 	"io"
+	"math/big"
 	"os"
 
 	"github.com/tomatome/grdp/glog"
@@ -358,11 +363,12 @@ type ProprietaryServerCertificate struct {
 	Padding []byte `struc:"[8]byte"`
 }
 
-func (p *ProprietaryServerCertificate) GetPublicKey() (uint32, []byte) {
-	return p.PublicKeyBlob.PubExp, p.PublicKeyBlob.Modulus
+func (p *ProprietaryServerCertificate) GetPublicKey() (*rsa.PublicKey, error) {
+	b := new(big.Int).SetBytes(core.Reverse(p.PublicKeyBlob.Modulus))
+	e := new(big.Int).SetInt64(int64(p.PublicKeyBlob.PubExp))
+	return &rsa.PublicKey{b, int(e.Int64())}, nil
 }
 func (p *ProprietaryServerCertificate) Verify() bool {
-	//todo
 	return true
 }
 func (p *ProprietaryServerCertificate) Encrypt() []byte {
@@ -401,20 +407,42 @@ type X509CertificateChain struct {
 	Padding       []byte     `struc:"[12]byte"`
 }
 
-func (p *X509CertificateChain) GetPublicKey() (uint32, []byte) {
-	//todo
-	return 0, nil
+func (x *X509CertificateChain) GetPublicKey() (*rsa.PublicKey, error) {
+	data := x.CertBlobArray[len(x.CertBlobArray)-1].AbCert
+	cert, err := x509.ParseCertificate(data)
+	if err != nil {
+		glog.Error("X509 ParseCertificate err:", err)
+		return nil, err
+	}
+	var rsaPublicKey *rsa.PublicKey
+	if cert.PublicKey == nil {
+		var pubKeyInfo struct {
+			Algorithm        pkix.AlgorithmIdentifier
+			SubjectPublicKey asn1.BitString
+		}
+		_, err = asn1.Unmarshal(cert.RawSubjectPublicKeyInfo, &pubKeyInfo)
+		if err != nil {
+			return nil, err
+		}
+		rsaPublicKey, err = x509.ParsePKCS1PublicKey(pubKeyInfo.SubjectPublicKey.Bytes)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		rsaPublicKey = cert.PublicKey.(*rsa.PublicKey)
+	}
+
+	return rsaPublicKey, nil
 }
-func (p *X509CertificateChain) Verify() bool {
+func (x *X509CertificateChain) Verify() bool {
 	return true
 }
-func (p *X509CertificateChain) Encrypt() []byte {
-
+func (x *X509CertificateChain) Encrypt() []byte {
 	//todo
 	return nil
 }
-func (p *X509CertificateChain) Unpack(r io.Reader) error {
-	return struc.Unpack(r, p)
+func (x *X509CertificateChain) Unpack(r io.Reader) error {
+	return struc.Unpack(r, x)
 }
 
 type ServerCoreData struct {
@@ -436,7 +464,13 @@ func (d *ServerCoreData) ScType() Message {
 	return SC_CORE
 }
 func (d *ServerCoreData) Unpack(r io.Reader) error {
-	return struc.Unpack(r, d)
+	version, _ := core.ReadUInt32LE(r)
+	d.RdpVersion = VERSION(version)
+	d.ClientRequestedProtocol, _ = core.ReadUInt32LE(r)
+	d.EarlyCapabilityFlags, _ = core.ReadUInt32LE(r)
+
+	return nil
+	//return struc.Unpack(r, d)
 }
 
 type ServerNetworkData struct {
@@ -456,7 +490,7 @@ func (d *ServerNetworkData) Unpack(r io.Reader) error {
 }
 
 type CertData interface {
-	GetPublicKey() (uint32, []byte)
+	GetPublicKey() (*rsa.PublicKey, error)
 	Verify() bool
 	Unpack(io.Reader) error
 }
@@ -573,6 +607,7 @@ func ReadConferenceCreateResponse(data []byte) []interface{} {
 	ln, _ := per.ReadLength(r)
 	for ln > 0 {
 		t, _ := core.ReadUint16LE(r)
+		glog.Debugf("Message type 0x%x,ln:%v", t, ln)
 		l, _ := core.ReadUint16LE(r)
 		dataBytes, _ := core.ReadBytes(int(l)-4, r)
 		ln = ln - l
@@ -588,6 +623,7 @@ func ReadConferenceCreateResponse(data []byte) []interface{} {
 			glog.Error("Unknown type", t)
 			continue
 		}
+
 		if d != nil {
 			r := bytes.NewReader(dataBytes)
 			err := d.Unpack(r)

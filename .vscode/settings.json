@@ -4,7 +4,6 @@
         "GO111MODULE": "on",
         "GOPROXY": "https://goproxy.cn,direct"
     },
-    "go.useLanguageServer": false,
     "go.autocompleteUnimportedPackages": true,
     "go.formatTool": "goimports",
     "go.languageServerExperimentalFeatures": {

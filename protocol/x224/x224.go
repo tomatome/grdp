@@ -98,19 +98,28 @@ const (
  * @see	http://msdn.microsoft.com/en-us/library/cc240470.aspx
  */
 type ClientConnectionRequestPDU struct {
-	Len         uint8
-	Code        MessageType
-	Padding1    uint16
-	Padding2    uint16
-	Padding3    uint8
-	Cookie      []byte
-	ProtocolNeg *Negotiation
+	Len               uint8
+	Code              MessageType
+	Padding1          uint16
+	Padding2          uint16
+	Padding3          uint8
+	Cookie            []byte
+	requestedProtocol uint32
+	ProtocolNeg       *Negotiation
 }
 
-func NewClientConnectionRequestPDU(coockie []byte) *ClientConnectionRequestPDU {
+func NewClientConnectionRequestPDU(cookie []byte, requestedProtocol uint32) *ClientConnectionRequestPDU {
 	x := ClientConnectionRequestPDU{0, TPDU_CONNECTION_REQUEST, 0, 0, 0,
-		coockie, NewNegotiation()}
-	x.Len = uint8(len(x.Serialize()) - 1)
+		cookie, requestedProtocol, NewNegotiation()}
+
+	x.Len = 6
+	if len(cookie) > 0 {
+		x.Len += uint8(len(cookie) + 2)
+	}
+	if x.requestedProtocol > PROTOCOL_RDP {
+		x.Len += 8
+	}
+
 	return &x
 }
 
@@ -122,11 +131,15 @@ func (x *ClientConnectionRequestPDU) Serialize() []byte {
 	core.WriteUInt16BE(x.Padding2, buff)
 	core.WriteUInt8(x.Padding3, buff)
 
-	buff.Write(x.Cookie)
-	if x.Len > 14 {
-		core.WriteUInt16LE(0x0A0D, buff)
+	if len(x.Cookie) > 0 {
+		buff.Write(x.Cookie)
+		core.WriteUInt8(0x0D, buff)
+		core.WriteUInt8(0x0A, buff)
 	}
-	struc.Pack(buff, x.ProtocolNeg)
+
+	if x.requestedProtocol > PROTOCOL_RDP {
+		struc.Pack(buff, x.ProtocolNeg)
+	}
 
 	return buff.Bytes()
 }
@@ -217,7 +230,8 @@ func (x *X224) Connect() error {
 	if x.transport == nil {
 		return errors.New("no transport")
 	}
-	message := NewClientConnectionRequestPDU(make([]byte, 0))
+	cookie := "Cookie: mstshash=test"
+	message := NewClientConnectionRequestPDU([]byte(cookie), x.requestedProtocol)
 	message.ProtocolNeg.Type = TYPE_RDP_NEG_REQ
 	message.ProtocolNeg.Result = uint32(x.requestedProtocol)
 
@@ -229,26 +243,32 @@ func (x *X224) Connect() error {
 
 func (x *X224) recvConnectionConfirm(s []byte) {
 	glog.Debug("x224 recvConnectionConfirm ", hex.EncodeToString(s))
-	message := &ServerConnectionConfirm{}
-	if err := struc.Unpack(bytes.NewReader(s), message); err != nil {
-		glog.Error("ReadServerConnectionConfirm err", err)
-		return
-	}
-	glog.Debugf("message: %+v", *message.ProtocolNeg)
-	if message.ProtocolNeg.Type == TYPE_RDP_NEG_FAILURE {
-		glog.Error(fmt.Sprintf("NODE_RDP_PROTOCOL_X224_NEG_FAILURE with code: %d,see https://msdn.microsoft.com/en-us/library/cc240507.aspx",
-			message.ProtocolNeg.Result))
-		//only use Standard RDP Security mechanisms
-		if message.ProtocolNeg.Result == 2 {
-			glog.Info("Only use Standard RDP Security mechanisms, Reconnect with Standard RDP")
+	r := bytes.NewReader(s)
+	ln, _ := core.ReadUInt8(r)
+	if ln > 6 {
+		message := &ServerConnectionConfirm{}
+		if err := struc.Unpack(bytes.NewReader(s), message); err != nil {
+			glog.Error("ReadServerConnectionConfirm err", err)
+			return
 		}
-		x.Close()
-		return
-	}
+		glog.Debugf("message: %+v", *message.ProtocolNeg)
+		if message.ProtocolNeg.Type == TYPE_RDP_NEG_FAILURE {
+			glog.Error(fmt.Sprintf("NODE_RDP_PROTOCOL_X224_NEG_FAILURE with code: %d,see https://msdn.microsoft.com/en-us/library/cc240507.aspx",
+				message.ProtocolNeg.Result))
+			//only use Standard RDP Security mechanisms
+			if message.ProtocolNeg.Result == 2 {
+				glog.Info("Only use Standard RDP Security mechanisms, Reconnect with Standard RDP")
+			}
+			x.Close()
+			return
+		}
 
-	if message.ProtocolNeg.Type == TYPE_RDP_NEG_RSP {
-		glog.Info("TYPE_RDP_NEG_RSP")
-		x.selectedProtocol = message.ProtocolNeg.Result
+		if message.ProtocolNeg.Type == TYPE_RDP_NEG_RSP {
+			glog.Info("TYPE_RDP_NEG_RSP")
+			x.selectedProtocol = message.ProtocolNeg.Result
+		}
+	} else {
+		x.selectedProtocol = PROTOCOL_RDP
 	}
 
 	if x.selectedProtocol == PROTOCOL_HYBRID_EX {

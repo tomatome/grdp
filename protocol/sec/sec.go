@@ -3,12 +3,13 @@ package sec
 import (
 	"bytes"
 	"crypto/md5"
+	"crypto/rand"
 	"crypto/rc4"
+	"crypto/rsa"
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
 	"io"
-	"math/big"
 	"unicode/utf16"
 
 	"github.com/lunixbochs/struc"
@@ -352,6 +353,7 @@ func (s *SEC) writeEncryptedPayload(data []byte, checkSum bool) []byte {
 	}
 
 	if checkSum {
+		glog.Debug("need checkSum")
 		return []byte{}
 	}
 
@@ -521,26 +523,28 @@ func (c *Client) ServerSecurityData() *gcc.ServerSecurityData {
 @return: {str} 40 bits data
 @see: http://msdn.microsoft.com/en-us/library/cc240785.aspx
 */
-//func gen40bits(data string)string{
-//    return "\xd1\x26\x9e" + data[:8][-5:]
-//}
+func gen40bits(data []byte) []byte {
+	return append([]byte("\xd1\x26\x9e"), data[3:8]...)
+}
+
 /*
 @summary: generate 56 bits data from 128 bits data
 @param data: {str} 128 bits data
 @return: {str} 56 bits data
 @see: http://msdn.microsoft.com/en-us/library/cc240785.aspx
 */
-//func gen56bits(data string) string{
-//   return "\xd1" + data[:8][-7:]
-//}
+func gen56bits(data []byte) []byte {
+	return append([]byte("\xd1"), data[1:8]...)
+}
+
 /*
- @summary: Generate particular signature from combination of sha1 and md5
- @see: http://msdn.microsoft.com/en-us/library/cc241992.aspx
- @param inputData: strange input (see doc)
- @param salt: salt for context call
- @param salt1: another salt (ex : client random)
- @param salt2: another another salt (ex: server random)
- @return : MD5(Salt + SHA1(Input + Salt + Salt1 + Salt2))
+@summary: Generate particular signature from combination of sha1 and md5
+@see: http://msdn.microsoft.com/en-us/library/cc241992.aspx
+@param inputData: strange input (see doc)
+@param salt: salt for context call
+@param salt1: another salt (ex : client random)
+@param salt2: another another salt (ex: server random)
+@return : MD5(Salt + SHA1(Input + Salt + Salt1 + Salt2))
 */
 func saltedHash(inputData, salt, salt1, salt2 []byte) []byte {
 	sha1Digest := sha1.New()
@@ -630,12 +634,13 @@ func generateKeys(clientRandom, serverRandom []byte, method uint32) ([]byte, []b
 	glog.Debug("SecondKey128:", hex.EncodeToString(initialSecondKey128))
 	//generate valid key
 	if method == gcc.ENCRYPTION_FLAG_40BIT {
-		//return gen40bits(macKey128), gen40bits(initialFirstKey128), gen40bits(initialSecondKey128)
+		return gen40bits(macKey128), gen40bits(initialFirstKey128), gen40bits(initialSecondKey128)
 	} else if method == gcc.ENCRYPTION_FLAG_56BIT {
-		//return gen56bits(macKey128), gen56bits(initialFirstKey128), gen56bits(initialSecondKey128)
-	} //else if method == gcc.ENCRYPTION_FLAG_128BIT{
+		return gen56bits(macKey128), gen56bits(initialFirstKey128), gen56bits(initialSecondKey128)
+	}
+	// method == gcc.ENCRYPTION_FLAG_128BIT
 	return macKey128, initialFirstKey128, initialSecondKey128
-	//}
+
 }
 
 type ClientSecurityExchangePDU struct {
@@ -673,20 +678,10 @@ func (c *Client) sendClientRandom() {
 		glog.Warn("Cannot verify server identity")
 	}
 
-	ePublicKey, mPublicKey := c.ServerSecurityData().ServerCertificate.CertData.GetPublicKey()
-	b := new(big.Int).SetBytes(core.Reverse(mPublicKey))
-	e := new(big.Int).SetInt64(int64(ePublicKey))
-	d := new(big.Int).SetBytes(core.Reverse(clientRandom))
-	r := new(big.Int).Exp(d, e, b)
-	var ret []byte
-	if len(b.Bytes()) > 0 && len(r.Bytes()) > len(b.Bytes()) {
-		ret = r.Bytes()[:len(b.Bytes())]
-	} else {
-		ln := len(r.Bytes())
-		if ln < 1 {
-			ln = 1
-		}
-		ret = r.Bytes()[:ln]
+	serverPubKey, _ := c.ServerSecurityData().ServerCertificate.CertData.GetPublicKey()
+	ret, err := rsa.EncryptPKCS1v15(rand.Reader, serverPubKey, core.Reverse(clientRandom))
+	if err != nil {
+		glog.Error("err:", err)
 	}
 	message := ClientSecurityExchangePDU{}
 	message.EncryptedClientRandom = core.Reverse(ret)
@@ -764,7 +759,7 @@ func (c *Client) sendClientNewLicenseRequest(data []byte) {
 		rd := bytes.NewReader(req.ServerCertificate.BlobData)
 		err := sc.Unpack(rd)
 		if err != nil {
-			glog.Error(err)
+			glog.Error("read serverCertificate err:", err)
 			return
 		}
 	}
@@ -779,44 +774,45 @@ func (c *Client) sendClientNewLicenseRequest(data []byte) {
 
 	//format message
 	message := &lic.ClientNewLicenseRequest{}
+	message.PreferredKeyExchangeAlg = 0x00000001
+	message.PlatformId = 0x04000000 | 0x00010000
 	message.ClientRandom = clientRandom
 
 	buff := &bytes.Buffer{}
 
-	ePublicKey, mPublicKey := sc.CertData.GetPublicKey()
-	b := new(big.Int).SetBytes(core.Reverse(mPublicKey))
-	e := new(big.Int).SetInt64(int64(ePublicKey))
-	d := new(big.Int).SetBytes(core.Reverse(clientRandom))
-	r := new(big.Int).Exp(d, e, b)
-	var ret []byte
-	if len(b.Bytes()) > 0 {
-		ret = r.Bytes()[:len(b.Bytes())]
-	} else {
-		ln := len(r.Bytes())
-		if ln < 1 {
-			ln = 1
-		}
-		ret = r.Bytes()[:ln]
+	serverPubKey, _ := sc.CertData.GetPublicKey()
+	ret, err := rsa.EncryptPKCS1v15(rand.Reader, serverPubKey, core.Reverse(preMasterSecret))
+	if err != nil {
+		glog.Error("err:", err)
 	}
+
 	buff.Write(core.Reverse(ret))
 	buff.Write([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	message.EncryptedPreMasterSecret.BlobData = buff.Bytes()
-
-	buff.Reset()
-	buff.Write(c.ClientCoreData().ClientName[:])
-	buff.Write([]byte{0x00})
-	message.ClientMachineName.BlobData = buff.Bytes()
+	message.EncryptedPreMasterSecret.WBlobLen = uint16(buff.Len())
+	message.EncryptedPreMasterSecret.WBlobType = lic.BB_RANDOM_BLOB
 
 	buff.Reset()
 	buff.Write(c.info.UserName)
 	buff.Write([]byte{0x00})
 	message.ClientUserName.BlobData = buff.Bytes()
+	message.ClientUserName.WBlobLen = uint16(buff.Len())
+	message.ClientUserName.WBlobType = lic.BB_CLIENT_USER_NAME_BLOB
 
 	buff.Reset()
-	struc.Pack(buff, message)
+	buff.Write(c.ClientCoreData().ClientName[:])
+	buff.Write([]byte{0x00})
+	message.ClientMachineName.BlobData = buff.Bytes()
+	message.ClientMachineName.WBlobLen = uint16(buff.Len())
+	message.ClientMachineName.WBlobType = lic.BB_CLIENT_MACHINE_NAME_BLOB
 
-	c.sendFlagged(LICENSE_PKT, b.Bytes())
+	buff.Reset()
+	err = struc.Pack(buff, message)
+	if err != nil {
+		glog.Error("err:", err)
+	}
 
+	c.sendFlagged(LICENSE_PKT, buff.Bytes())
 }
 
 func (c *Client) sendClientChallengeResponse(data []byte) {
