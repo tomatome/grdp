@@ -369,6 +369,17 @@ func (c *Client) recvPDU(s []byte) {
 		}
 		if p.ShareCtrlHeader.PDUType == PDUTYPE_DEACTIVATEALLPDU {
 			c.transport.Once("data", c.recvDemandActivePDU)
+		} else if p.ShareCtrlHeader.PDUType == PDUTYPE_DATAPDU {
+			d := p.Message.(*DataPDU)
+			if d.Header.PDUType2 == PDUTYPE2_UPDATE {
+				up := d.Data.(*UpdateDataPDU)
+				p := up.Udata
+				if up.UpdateType == FASTPATH_UPDATETYPE_BITMAP {
+					c.Emit("bitmap", p.(*BitmapUpdateDataPDU).Rectangles)
+				} else if up.UpdateType == FASTPATH_UPDATETYPE_ORDERS {
+					c.Emit("orders", p.(*FastPathOrdersPDU).OrderPdus)
+				}
+			}
 		}
 	}
 }
@@ -435,14 +446,14 @@ type InputEventsInterface interface {
 }
 
 func (c *Client) SendInputEvents(msgType uint16, events []InputEventsInterface) {
-	pdu := &ClientInputEventPDU{}
-	pdu.NumEvents = uint16(len(events))
-	pdu.SlowPathInputEvents = make([]SlowPathInputEvent, 0, pdu.NumEvents)
+	p := &ClientInputEventPDU{}
+	p.NumEvents = uint16(len(events))
+	p.SlowPathInputEvents = make([]SlowPathInputEvent, 0, p.NumEvents)
 	for _, in := range events {
 		seria := in.Serialize()
 		s := SlowPathInputEvent{0, msgType, len(seria), seria}
-		pdu.SlowPathInputEvents = append(pdu.SlowPathInputEvents, s)
+		p.SlowPathInputEvents = append(p.SlowPathInputEvents, s)
 	}
 
-	c.sendDataPDU(pdu)
+	c.sendDataPDU(p)
 }

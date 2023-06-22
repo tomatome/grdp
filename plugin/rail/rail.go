@@ -56,8 +56,8 @@ func NewClient() *RailClient {
 	return &RailClient{
 		DesktopWidth:             800,
 		DesktopHeight:            600,
-		RemoteApplicationProgram: "notepad",
-		ShellWorkingDirectory:    "c:\\",
+		RemoteApplicationProgram: "calc",
+		ShellWorkingDirectory:    "/tmp",
 	}
 }
 

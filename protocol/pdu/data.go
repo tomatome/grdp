@@ -433,35 +433,39 @@ func readDataPDU(r io.Reader) (*DataPDU, error) {
 	var d DataPDUData
 	glog.Debugf("PDUType2 0x%02x", header.PDUType2)
 	switch header.PDUType2 {
+	case PDUTYPE2_UPDATE:
+		d = &UpdateDataPDU{}
+
 	case PDUTYPE2_SYNCHRONIZE:
 		d = &SynchronizeDataPDU{}
+
 	case PDUTYPE2_CONTROL:
 		d = &ControlDataPDU{}
+
 	case PDUTYPE2_FONTLIST:
 		d = &FontListDataPDU{}
+
 	case PDUTYPE2_SET_ERROR_INFO_PDU:
 		d = &ErrorInfoDataPDU{}
+
 	case PDUTYPE2_FONTMAP:
 		d = &FontMapDataPDU{}
+
 	case PDUTYPE2_SAVE_SESSION_INFO:
-		s := &SaveSessionInfo{}
-		s.Unpack(r)
-		d = s
+		d = &SaveSessionInfo{}
+
 	default:
 		err = errors.New(fmt.Sprintf("Unknown data pdu type2 0x%02x", header.PDUType2))
 		glog.Error(err)
 		return nil, err
 	}
 
-	if header.PDUType2 != PDUTYPE2_SAVE_SESSION_INFO {
-		err = struc.Unpack(r, d)
-		if err != nil {
-			glog.Error("read data pdu error", err)
-			return nil, err
-		}
+	err = d.Unpack(r)
+	if err != nil {
+		glog.Error("Read data pdu:", err)
+		return nil, err
 	}
 
-	glog.Debugf("PDUType2<%s>: %+v", PduType2(d.Type2()), d)
 	p := &DataPDU{
 		Header: header,
 		Data:   d,
@@ -471,6 +475,81 @@ func readDataPDU(r io.Reader) (*DataPDU, error) {
 
 type DataPDUData interface {
 	Type2() uint8
+	Unpack(io.Reader) error
+}
+
+type UpdateDataPDU struct {
+	UpdateType uint16
+	Udata      UpdateData
+}
+
+func (*UpdateDataPDU) Type2() uint8 {
+	return PDUTYPE2_UPDATE
+}
+func (d *UpdateDataPDU) Unpack(r io.Reader) (err error) {
+	//slow path update
+	d.UpdateType, err = core.ReadUint16LE(r)
+	glog.Debugf("UpdateType 0x%02x", d.UpdateType)
+	var p UpdateData
+	switch d.UpdateType {
+	case FASTPATH_UPDATETYPE_ORDERS:
+	case FASTPATH_UPDATETYPE_BITMAP:
+		p = &BitmapUpdateDataPDU{}
+	case FASTPATH_UPDATETYPE_PALETTE:
+	case FASTPATH_UPDATETYPE_SYNCHRONIZE:
+	}
+	if p != nil {
+		err = p.Unpack(r)
+		if err != nil {
+			//glog.Error("Unpack:", err)
+			return err
+		}
+	} else {
+		return errors.New(fmt.Sprintf("Unsupport slow update type 0x%x", d.UpdateType))
+	}
+
+	d.Udata = p
+
+	return nil
+}
+
+type BitmapUpdateDataPDU struct {
+	NumberRectangles uint16 `struc:"little,sizeof=Rectangles"`
+	Rectangles       []BitmapData
+}
+
+func (*BitmapUpdateDataPDU) FastPathUpdateType() uint8 {
+	return FASTPATH_UPDATETYPE_BITMAP
+}
+func (f *BitmapUpdateDataPDU) Unpack(r io.Reader) error {
+	var err error
+	f.NumberRectangles, err = core.ReadUint16LE(r)
+	f.Rectangles = make([]BitmapData, 0, f.NumberRectangles)
+	for i := 0; i < int(f.NumberRectangles); i++ {
+		rect := BitmapData{}
+		rect.DestLeft, err = core.ReadUint16LE(r)
+		rect.DestTop, err = core.ReadUint16LE(r)
+		rect.DestRight, err = core.ReadUint16LE(r)
+		rect.DestBottom, err = core.ReadUint16LE(r)
+		rect.Width, err = core.ReadUint16LE(r)
+		rect.Height, err = core.ReadUint16LE(r)
+		rect.BitsPerPixel, err = core.ReadUint16LE(r)
+		rect.Flags, err = core.ReadUint16LE(r)
+		rect.BitmapLength, err = core.ReadUint16LE(r)
+		ln := rect.BitmapLength
+		if rect.Flags&BITMAP_COMPRESSION != 0 && (rect.Flags&NO_BITMAP_COMPRESSION_HDR == 0) {
+			rect.BitmapComprHdr = new(BitmapCompressedDataHeader)
+			rect.BitmapComprHdr.CbCompFirstRowSize, err = core.ReadUint16LE(r)
+			rect.BitmapComprHdr.CbCompMainBodySize, err = core.ReadUint16LE(r)
+			rect.BitmapComprHdr.CbScanWidth, err = core.ReadUint16LE(r)
+			rect.BitmapComprHdr.CbUncompressedSize, err = core.ReadUint16LE(r)
+			ln = rect.BitmapComprHdr.CbCompMainBodySize
+		}
+
+		rect.BitmapDataStream, err = core.ReadBytes(int(ln), r)
+		f.Rectangles = append(f.Rectangles, rect)
+	}
+	return err
 }
 
 type SynchronizeDataPDU struct {
@@ -488,6 +567,9 @@ func NewSynchronizeDataPDU(targetUser uint16) *SynchronizeDataPDU {
 		TargetUser:  targetUser,
 	}
 }
+func (d *SynchronizeDataPDU) Unpack(r io.Reader) error {
+	return struc.Unpack(r, d)
+}
 
 type ControlDataPDU struct {
 	Action    uint16 `struc:"little"`
@@ -497,6 +579,9 @@ type ControlDataPDU struct {
 
 func (*ControlDataPDU) Type2() uint8 {
 	return PDUTYPE2_CONTROL
+}
+func (d *ControlDataPDU) Unpack(r io.Reader) error {
+	return struc.Unpack(r, d)
 }
 
 type FontListDataPDU struct {
@@ -509,6 +594,9 @@ type FontListDataPDU struct {
 func (*FontListDataPDU) Type2() uint8 {
 	return PDUTYPE2_FONTLIST
 }
+func (d *FontListDataPDU) Unpack(r io.Reader) error {
+	return struc.Unpack(r, d)
+}
 
 type ErrorInfoDataPDU struct {
 	ErrorInfo uint32 `struc:"little"`
@@ -516,6 +604,9 @@ type ErrorInfoDataPDU struct {
 
 func (*ErrorInfoDataPDU) Type2() uint8 {
 	return PDUTYPE2_SET_ERROR_INFO_PDU
+}
+func (d *ErrorInfoDataPDU) Unpack(r io.Reader) error {
+	return struc.Unpack(r, d)
 }
 
 type FontMapDataPDU struct {
@@ -527,6 +618,9 @@ type FontMapDataPDU struct {
 
 func (*FontMapDataPDU) Type2() uint8 {
 	return PDUTYPE2_FONTMAP
+}
+func (d *FontMapDataPDU) Unpack(r io.Reader) error {
+	return struc.Unpack(r, d)
 }
 
 type InfoType uint32
@@ -953,4 +1047,7 @@ type ClientInputEventPDU struct {
 
 func (*ClientInputEventPDU) Type2() uint8 {
 	return PDUTYPE2_INPUT
+}
+func (*ClientInputEventPDU) Unpack(io.Reader) error {
+	return nil
 }

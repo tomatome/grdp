@@ -163,11 +163,12 @@ func ToRGBA(pixel int, i int, data []byte) (r, g, b, a uint8) {
 	a = 255
 	switch pixel {
 	case 1:
+		rgb555 := core.Uint16BE(data[i], data[i+1])
+		r, g, b = core.RGB555ToRGB(rgb555)
 	case 2:
 		rgb565 := core.Uint16BE(data[i], data[i+1])
 		r, g, b = core.RGB565ToRGB(rgb565)
-	case 3:
-	case 4:
+	case 3, 4:
 		fallthrough
 	default:
 		r, g, b = data[i+2], data[i+1], data[i]

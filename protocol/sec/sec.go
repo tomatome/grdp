@@ -284,7 +284,6 @@ func (s *SEC) Write(b []byte) (n int, err error) {
 	if !s.enableEncryption {
 		return s.transport.Write(b)
 	}
-	glog.Info("b:", hex.EncodeToString(b))
 	data := s.encrytData(b)
 	return s.transport.Write(data)
 }
@@ -658,13 +657,13 @@ func (e *ClientSecurityExchangePDU) serialize() []byte {
 	return buff.Bytes()
 }
 func (c *Client) sendClientRandom() {
-	glog.Info("send Client Random")
+	glog.Debug("send Client Random")
 
 	clientRandom := core.Random(32)
-	glog.Info("clientRandom:", hex.EncodeToString(clientRandom))
+	glog.Debug("clientRandom:", hex.EncodeToString(clientRandom))
 
 	serverRandom := c.ServerSecurityData().ServerRandom
-	glog.Info("ServerRandom:", hex.EncodeToString(serverRandom))
+	glog.Debug("ServerRandom:", hex.EncodeToString(serverRandom))
 
 	c.macKey, c.initialDecrytKey, c.initialEncryptKey = generateKeys(clientRandom,
 		serverRandom, c.ServerSecurityData().EncryptionMethod)

@@ -123,9 +123,16 @@ func Uint16BE(d0, d1 uint8) uint16 {
 }
 
 func RGB565ToRGB(data uint16) (r, g, b uint8) {
-	r = uint8(uint32(data&0xF800)>>11) << 3
-	g = uint8(uint32(data&0x07E0)>>5) << 2
-	b = uint8(uint32(data&0x001F)) << 3
+	r = uint8(data & 0xF800 >> 8)
+	g = uint8(data & 0x07E0 >> 3)
+	b = uint8(data & 0x001F << 3)
+
+	return
+}
+func RGB555ToRGB(data uint16) (r, g, b uint8) {
+	r = uint8(data & 0x7C00 >> 7)
+	g = uint8(data & 0x03E0 >> 2)
+	b = uint8(data & 0x001F << 3)
 
 	return
 }
