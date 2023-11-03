@@ -106,9 +106,14 @@ func (c *RdpClient) MouseMove(x, y int) {
 func (c *RdpClient) MouseWheel(scroll, x, y int) {
 	p := &pdu.PointerEvent{}
 	p.PointerFlags |= pdu.PTRFLAGS_WHEEL
+	if scroll < 0 {
+		p.PointerFlags |= pdu.PTRFLAGS_WHEEL_NEGATIVE
+	}
+	var ts uint8 = uint8(scroll)
+	p.PointerFlags |= pdu.WheelRotationMask & uint16(ts)
 	p.XPos = uint16(x)
 	p.YPos = uint16(y)
-	c.pdu.SendInputEvents(pdu.INPUT_EVENT_SCANCODE, []pdu.InputEventsInterface{p})
+	c.pdu.SendInputEvents(pdu.INPUT_EVENT_MOUSE, []pdu.InputEventsInterface{p})
 }
 
 func (c *RdpClient) MouseUp(button int, x, y int) {
