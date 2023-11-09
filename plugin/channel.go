@@ -1,6 +1,5 @@
 package plugin
 
-import "C"
 import (
 	"bytes"
 	"fmt"
