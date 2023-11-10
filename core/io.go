@@ -29,6 +29,9 @@ func ReadByte(r io.Reader) (byte, error) {
 
 func ReadUInt8(r io.Reader) (uint8, error) {
 	b, err := ReadBytes(1, r)
+	if len(b) == 0 {
+		return 0, err
+	}
 	return uint8(b[0]), err
 }
 
